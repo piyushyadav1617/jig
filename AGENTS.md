@@ -1,4 +1,4 @@
-# coding-agent
+# jig
 
 ## Runtime & package manager
 
@@ -10,7 +10,7 @@
 | Action | Command |
 |--------|---------|
 | Install deps | `bun install` |
-| Run app | `bun run index.ts` |
+| Run app | `bun run index.ts` (or `jig` after `bun link`) |
 | Type-check | `bun run tsc --noEmit` |
 
 ## Structure

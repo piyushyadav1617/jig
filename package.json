@@ -1,12 +1,26 @@
 {
-  "name": "coding-agent",
-  "module": "index.ts",
+  "name": "jig",
+  "module": "src/index.ts",
   "type": "module",
   "private": true,
+  "bin": {
+    "jig": "src/index.ts"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/react": "^19.2.18"
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@openrouter/sdk": "^1.2.19",
+    "@opentui/core": "^0.5.1",
+    "@opentui/react": "^0.5.1",
+    "react": "^19.2.6"
   }
 }
