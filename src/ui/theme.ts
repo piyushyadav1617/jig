@@ -1,0 +1,110 @@
+import { SyntaxStyle, type BorderSides } from "@opentui/core";
+
+const c = {
+	text: "#d4d4d8",
+	textDim: "#888888",
+	textMuted: "#a1a1aa",
+	textFaint: "#94a3b8",
+	status: "#888888",
+	error: "red",
+	prompt: "#FF6B00",
+	promptActive: "yellow",
+	toolCall: "magenta",
+	toolResult: "green",
+	heading: "#7dd3fc",
+	inlineCode: "#fbbf24",
+	link: "#38bdf8",
+	linkUrl: "#60a5fa",
+	border: "#333333",
+	borderDim: "#333333",
+	logo: "#FF6B00",
+	keyword: "#c084fc",
+	func: "#7dd3fc",
+	type: "#e5c07b",
+	string: "#86efac",
+	constant: "#fbbf24",
+	comment: "#6b7280",
+	operator: "#c084fc",
+	punctuation: "#6b7280",
+	variable: "#d4d4d8",
+	property: "#38bdf8",
+	codeBg: "#222222",
+};
+
+const tb = (): BorderSides[] => ["top", "bottom"];
+
+export const theme = {
+	colors: c,
+	borders: {
+		input: { sides: tb(), color: c.border },
+		userInput: { sides: tb(), color: c.borderDim },
+	},
+	markdownSyntaxStyle: SyntaxStyle.fromStyles({
+		default: { fg: c.text },
+		"markup.heading": { fg: c.heading, bold: true },
+		"markup.strong": { bold: true },
+		"markup.italic": { italic: true },
+		"markup.strikethrough": { dim: true },
+		"markup.list": { fg: c.textFaint },
+		"markup.quote": { fg: c.textMuted, italic: true },
+		"markup.raw": { fg: c.inlineCode },
+		"markup.link": { fg: c.link },
+		"markup.link.url": { fg: c.linkUrl, underline: true },
+		"markup.link.label": { fg: c.link },
+
+		keyword: { fg: c.keyword },
+		"keyword.conditional": { fg: c.keyword },
+		"keyword.conditional.ternary": { fg: c.keyword },
+		"keyword.import": { fg: c.keyword },
+		"keyword.repeat": { fg: c.keyword },
+		"keyword.coroutine": { fg: c.keyword },
+		"keyword.return": { fg: c.keyword },
+		"keyword.function": { fg: c.keyword },
+		"keyword.operator": { fg: c.keyword },
+		"keyword.exception": { fg: c.keyword },
+		"keyword.type": { fg: c.keyword },
+		"keyword.modifier": { fg: c.keyword },
+		"keyword.directive": { fg: c.keyword },
+
+		function: { fg: c.func },
+		"function.call": { fg: c.func },
+		"function.method": { fg: c.func },
+		"function.method.call": { fg: c.func },
+		"function.builtin": { fg: c.func },
+
+		type: { fg: c.type },
+		"type.builtin": { fg: c.type },
+
+		string: { fg: c.string },
+		"string.escape": { fg: c.string },
+		"string.regexp": { fg: c.string },
+		"string.special": { fg: c.string },
+		"string.special.url": { fg: c.string },
+
+		number: { fg: c.constant },
+
+		comment: { fg: c.comment },
+		"comment.documentation": { fg: c.comment },
+
+		variable: { fg: c.variable },
+		"variable.builtin": { fg: c.type },
+		"variable.member": { fg: c.property },
+		"variable.parameter": { fg: c.variable },
+
+		constant: { fg: c.constant },
+		"constant.builtin": { fg: c.constant },
+		boolean: { fg: c.constant },
+
+		operator: { fg: c.operator },
+		"punctuation.delimiter": { fg: c.punctuation },
+		"punctuation.bracket": { fg: c.punctuation },
+		"punctuation.special": { fg: c.punctuation },
+
+		constructor: { fg: c.type },
+		label: { fg: c.type },
+		module: { fg: c.func },
+		"module.builtin": { fg: c.func },
+		attribute: { fg: c.constant },
+		"character.special": { fg: c.constant },
+	}),
+};

@@ -1,16 +1,32 @@
-import { createCliRenderer, type CliRenderer } from "@opentui/core";
+import {
+	createCliRenderer,
+	type CliRenderer,
+} from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
 import type { Bus } from "@/ui/events.ts";
+import {
+	AssistantMessage,
+	ErrorView,
+	Logo,
+	Spinner,
+	StatusView,
+	ToolCallView,
+	ToolResultView,
+	UserInputView,
+} from "@/ui/components";
+import { theme } from "@/ui/theme.ts";
 
 export interface AppOptions {
 	bus: Bus;
 	model: string;
 }
 
+const { borders } = theme;
+
 type Entry =
 	| { kind: "user"; key: number; text: string }
-	| { kind: "assistant"; key: number; text: string }
+	| { kind: "assistant"; key: number; text: string; streaming: boolean }
 	| { kind: "tool_call"; key: number; name: string; args: string }
 	| { kind: "tool_result"; key: number; name: string; result: string }
 	| { kind: "status"; key: number; text: string }
@@ -19,13 +35,50 @@ type Entry =
 let entryKey = 0;
 const nextKey = () => ++entryKey;
 
-const trim = (s: string, max: number) =>
-	s.length > max ? `${s.slice(0, max)}…` : s;
+const sampleEntries: Entry[] = [
+	{ kind: "user", key: 1, text: "Can you read src/index.ts and write a new file?" },
+	{
+		kind: "assistant",
+		key: 2,
+		text: "Sure, let me read the file first.",
+		streaming: false,
+	},
+	{
+		kind: "tool_call",
+		key: 3,
+		name: "read",
+		args: JSON.stringify({ path: "src/index.ts" }),
+	},
+	{
+		kind: "tool_result",
+		key: 4,
+		name: "read",
+		result: 'import { foo } from "./bar";\n\nexport function main() {\n  foo();\n}',
+	},
+	{
+		kind: "tool_call",
+		key: 5,
+		name: "write",
+		args: JSON.stringify({
+			path: "src/new.ts",
+			content: 'import { baz } from "./qux";\n\nexport function run() {\n  baz();\n}',
+		}),
+	},
+	{
+		kind: "tool_result",
+		key: 6,
+		name: "write",
+		result: "Wrote 78 characters to src/new.ts",
+	},
+	{ kind: "status", key: 7, text: "Done." },
+];
 
-function CodingAgent({ bus, model }: { bus: Bus; model: string }) {
-	const [entries, setEntries] = useState<Entry[]>([
-		{ kind: "status", key: 0, text: `jig · model: ${model}` },
-	]);
+function CodingAgent({
+	bus,
+	model,
+	onExit,
+}: { bus: Bus; model: string; onExit: () => void }) {
+	const [entries, setEntries] = useState<Entry[]>([]);
 	const [running, setRunning] = useState(false);
 	const [inputValue, setInputValue] = useState("");
 	const currentAssistantKey = useRef<number | null>(null);
@@ -42,7 +95,7 @@ function CodingAgent({ bus, model }: { bus: Bus; model: string }) {
 			assistantBuffer.current = "";
 			const key = nextKey();
 			currentAssistantKey.current = key;
-			pushEntry({ kind: "assistant", key, text: "" });
+			pushEntry({ kind: "assistant", key, text: "", streaming: true });
 		};
 
 		const onDelta = ({ content }: { content: string }) => {
@@ -51,9 +104,9 @@ function CodingAgent({ bus, model }: { bus: Bus; model: string }) {
 			if (key === null) return;
 			const text = assistantBuffer.current;
 			setEntries((prev) =>
-				prev.map(function (entry){
-					return entry
-				}),
+				prev.map((e) =>
+					e.kind === "assistant" && e.key === key ? { ...e, text } : e,
+				),
 			);
 		};
 
@@ -69,27 +122,37 @@ function CodingAgent({ bus, model }: { bus: Bus; model: string }) {
 				kind: "tool_call",
 				key: nextKey(),
 				name,
-				args: trim(args, 80),
-			});
-		};
+				args,
+		});
+	};
 
-		const onToolResult = ({
+	const onToolResult = ({
+		name,
+		result,
+	}: {
+		id: string;
+		name: string;
+		result: string;
+	}) => {
+		pushEntry({
+			kind: "tool_result",
+			key: nextKey(),
 			name,
 			result,
-		}: {
-			id: string;
-			name: string;
-			result: string;
-		}) => {
-			pushEntry({
-				kind: "tool_result",
-				key: nextKey(),
-				name,
-				result: trim(result, 200),
-			});
-		};
+		});
+	};
 
 		const onTurnEnd = () => {
+			const key = currentAssistantKey.current;
+			if (key !== null) {
+				setEntries((prev) =>
+					prev.map((e) =>
+						e.kind === "assistant" && e.key === key
+							? { ...e, streaming: false }
+							: e,
+					),
+				);
+			}
 			currentAssistantKey.current = null;
 			assistantBuffer.current = "";
 		};
@@ -139,18 +202,12 @@ function CodingAgent({ bus, model }: { bus: Bus; model: string }) {
 				...prev,
 				{ kind: "status", key: nextKey(), text: "bye." },
 			]);
-			bus.emit("user:exit");
-			setTimeout(() => process.exit(0), 100);
-			return;
+		bus.emit("user:exit");
+		setTimeout(() => onExit(), 100);
+		return;
 		}
 		if (input === "clear") {
-			setEntries([
-				{
-					kind: "status",
-					key: nextKey(),
-					text: `jig · model: ${model}`,
-				},
-			]);
+			setEntries([]);
 			bus.emit("user:clear");
 			return;
 		}
@@ -169,66 +226,66 @@ function CodingAgent({ bus, model }: { bus: Bus; model: string }) {
 				stickyScroll={true}
 				stickyStart="bottom"
 				padding={1}
+				gap={10}
 			>
+				<Logo/>
 				{entries.map((entry) => {
 					switch (entry.kind) {
 						case "user":
 							return (
-								<text key={entry.key}>
-									<strong fg="cyan">{">"} </strong>
-									{entry.text}
-								</text>
+								<UserInputView key={entry.key} text={entry.text} />
 							);
 						case "assistant":
-							return <text key={entry.key}>{entry.text}</text>;
+							return (
+								<AssistantMessage
+									key={entry.key}
+									text={entry.text}
+									streaming={entry.streaming}
+								/>
+							);
 						case "tool_call":
 							return (
-								<text key={entry.key}>
-									<span fg="magenta">{"  ⟡ "}</span>
-									<strong>{entry.name}</strong>
-									<span fg="#888">{" " + entry.args}</span>
-								</text>
+								<ToolCallView
+									key={entry.key}
+									name={entry.name}
+									args={entry.args}
+								/>
 							);
 						case "tool_result":
 							return (
-								<text key={entry.key}>
-									<span fg="green">{"  ✓ "}</span>
-									<span fg="#888">{entry.name + " "}</span>
-									{entry.result}
-								</text>
+								<ToolResultView
+									key={entry.key}
+									name={entry.name}
+									result={entry.result}
+								/>
 							);
 						case "status":
-							return (
-								<text key={entry.key} fg="#888">
-									{entry.text}
-								</text>
-							);
+							return <StatusView key={entry.key} text={entry.text} />;
 						case "error":
-							return (
-								<text key={entry.key} fg="red">
-									{"✗ "}
-									{entry.text}
-								</text>
-							);
+							return <ErrorView key={entry.key} text={entry.text} />;
 					}
 				})}
 			</scrollbox>
-			<box flexDirection="row" height={1} width="100%">
-				<text>
-					<strong fg={running ? "yellow" : "cyan"}>
-						{running ? "● " : "> "}
-					</strong>
-				</text>
+			<box
+				flexDirection="row"
+				height={3}
+				width="100%"
+				style={{
+					border: ["top", "bottom"],
+					borderColor: borders.input.color,
+				}}
+			>
 				<input
 					ref={inputRef as never}
 					flexGrow={1}
 					focused
-					placeholder='ask the agent…  ("exit" to quit, "clear" to reset)'
+					placeholder='ask the agent  (exit to quit, clear to reset)'
 					value={inputValue}
 					onInput={setInputValue}
-					onSubmit={()=>handleSubmit as never}
+					onSubmit={() => handleSubmit(inputValue)}
 				/>
 			</box>
+			<Spinner active={running} />
 		</box>
 	);
 }
@@ -236,10 +293,16 @@ function CodingAgent({ bus, model }: { bus: Bus; model: string }) {
 export class App {
 	private readonly bus: Bus;
 	private readonly model: string;
+	private renderer?: CliRenderer;
 
 	constructor(options: AppOptions) {
 		this.bus = options.bus;
 		this.model = options.model;
+	}
+
+	stop(): void {
+		this.renderer?.destroy();
+		process.exit(0);
 	}
 
 	async start(): Promise<void> {
@@ -247,7 +310,14 @@ export class App {
 			exitOnCtrlC: false,
 			targetFps: 60,
 		});
+		this.renderer = renderer;
 		renderer.setTerminalTitle(`jig · ${this.model}`);
-		createRoot(renderer).render(<CodingAgent bus={this.bus} model={this.model} />);
+		createRoot(renderer).render(
+			<CodingAgent
+				bus={this.bus}
+				model={this.model}
+				onExit={() => this.stop()}
+			/>,
+		);
 	}
 }

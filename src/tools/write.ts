@@ -25,6 +25,7 @@ export const writeTool: Tool = {
 			await mkdir(dir, { recursive: true });
 		}
 		await writeFile(path, content, "utf-8");
-		return `Wrote ${content.length} characters to ${path}`;
+		const lines = content.split("\n").length;
+		return JSON.stringify({ path, lines, content });
 	},
 };

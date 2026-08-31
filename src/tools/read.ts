@@ -15,6 +15,7 @@ export const readTool: Tool = {
 		const path = args.path as string;
 		if (!path) throw new Error("path is required");
 		const content = await readFile(path, "utf-8");
-		return content;
+		const lines = content.split("\n").length;
+		return JSON.stringify({ path, lines, content });
 	},
 };
