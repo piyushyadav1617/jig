@@ -6,9 +6,11 @@ export type AgentEventMap = {
 	"user:clear": [];
 
 	"agent:turn_start": [{ input: string }];
+	"agent:step_start": [{ turn: number }];
 	"agent:delta": [{ content: string }];
 	"agent:tool_call": [{ id: string; name: string; arguments: string }];
 	"agent:tool_result": [{ id: string; name: string; result: string }];
+	"agent:step_end": [{ turn: number }];
 	"agent:turn_end": [{ turn: number }];
 	"agent:done": [];
 	"agent:error": [{ error: string }];

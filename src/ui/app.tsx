@@ -92,6 +92,9 @@ function CodingAgent({
 
 		const onTurnStart = () => {
 			setRunning(true);
+		};
+
+		const onStepStart = () => {
 			assistantBuffer.current = "";
 			const key = nextKey();
 			currentAssistantKey.current = key;
@@ -142,7 +145,7 @@ function CodingAgent({
 		});
 	};
 
-		const onTurnEnd = () => {
+		const onStepEnd = () => {
 			const key = currentAssistantKey.current;
 			if (key !== null) {
 				setEntries((prev) =>
@@ -155,6 +158,10 @@ function CodingAgent({
 			}
 			currentAssistantKey.current = null;
 			assistantBuffer.current = "";
+		};
+
+		const onTurnEnd = () => {
+			setRunning(false);
 		};
 
 		const onDone = () => {
@@ -171,9 +178,11 @@ function CodingAgent({
 		};
 
 		bus.on("agent:turn_start", onTurnStart);
+		bus.on("agent:step_start", onStepStart);
 		bus.on("agent:delta", onDelta);
 		bus.on("agent:tool_call", onToolCall);
 		bus.on("agent:tool_result", onToolResult);
+		bus.on("agent:step_end", onStepEnd);
 		bus.on("agent:turn_end", onTurnEnd);
 		bus.on("agent:done", onDone);
 		bus.on("agent:error", onError);
@@ -181,9 +190,11 @@ function CodingAgent({
 
 		return () => {
 			bus.off("agent:turn_start", onTurnStart);
+			bus.off("agent:step_start", onStepStart);
 			bus.off("agent:delta", onDelta);
 			bus.off("agent:tool_call", onToolCall);
 			bus.off("agent:tool_result", onToolResult);
+			bus.off("agent:step_end", onStepEnd);
 			bus.off("agent:turn_end", onTurnEnd);
 			bus.off("agent:done", onDone);
 			bus.off("agent:error", onError);
@@ -193,6 +204,8 @@ function CodingAgent({
 
 	const handleSubmit = (value: string) => {
 		if (running) return;
+		// TODO: The user might send commands while the agent is still processing a previous request. 
+		// We should queue them up and process them in order, rather than ignoring them.
 		const input = value.trim();
 		setInputValue("");
 		if (!input) return;

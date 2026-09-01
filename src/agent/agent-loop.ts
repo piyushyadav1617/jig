@@ -64,6 +64,8 @@ export class AgentLoop {
 
 	private async handleUserInput(input: string): Promise<void> {
 		if (this.running) return;
+		// TODO: User can send commands or extra messages for interruption or some other action
+		// So no need to return immediately while the agent is running, we can perform side tasks
 		const trimmed = input.trim();
 		if (!trimmed) return;
 
@@ -92,6 +94,8 @@ export class AgentLoop {
 			this.bus.emit("agent:turn_end", { turn });
 			return;
 		}
+
+		this.bus.emit("agent:step_start", { turn });
 
 		let assistantText = "";
 		const toolCallMap = new Map<
@@ -126,6 +130,7 @@ export class AgentLoop {
 
 		if (toolCalls.length === 0) {
 			this.messages.push({ role: "assistant", content: assistantText });
+			this.bus.emit("agent:step_end", { turn });
 			this.bus.emit("agent:turn_end", { turn });
 			return;
 		}
@@ -179,7 +184,7 @@ export class AgentLoop {
 			});
 		}
 
-		this.bus.emit("agent:turn_end", { turn });
+		this.bus.emit("agent:step_end", { turn });
 		await this.runStep(turn + 1);
 	}
 
