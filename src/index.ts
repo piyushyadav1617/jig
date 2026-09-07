@@ -8,7 +8,7 @@ import { bus } from "@/ui/events.ts";
 import { AgentLoop } from "@/agent/agent-loop.ts";
 import { App } from "@/ui/app.tsx";
 
-const MODEL = process.env.MODEL ?? "z-ai/glm-5.3-flash";
+const MODEL = process.env.MODEL ?? "inclusionai/ling-3.0-flash-fin:free";
 
 registerTool(bashTool);
 registerTool(editTool);

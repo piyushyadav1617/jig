@@ -70,11 +70,11 @@ export class AgentLoop {
 		if (!trimmed) return;
 
 		this.running = true;
-		this.bus.emit("agent:turn_start", { input: trimmed });
+		this.bus.emit("agent:task_start", { input: trimmed });
 		this.messages.push({ role: "user", content: trimmed });
 
 		try {
-			await this.runStep(0);
+			await this.runTask();
 		} catch (err) {
 			this.messages.pop();
 			this.bus.emit("agent:error", {
@@ -82,110 +82,110 @@ export class AgentLoop {
 			});
 		} finally {
 			this.running = false;
-			this.bus.emit("agent:done");
+			this.bus.emit("agent:task_end");
 		}
 	}
 
-	private async runStep(turn: number): Promise<void> {
-		if (turn >= this.maxTurns) {
-			this.bus.emit("agent:error", {
-				error: `reached max turns (${this.maxTurns}), stopping`,
-			});
-			this.bus.emit("agent:turn_end", { turn });
-			return;
-		}
+	private async runTask(): Promise<void> {
+		let turn = 0;
 
-		this.bus.emit("agent:step_start", { turn });
+		while (turn < this.maxTurns) {
+			this.bus.emit("agent:turn_start", { turn });
 
-		let assistantText = "";
-		const toolCallMap = new Map<
-			number,
-			{ id: string; name: string; arguments: string }
-		>();
+			let assistantText = "";
+			const toolCallMap = new Map<
+				number,
+				{ id: string; name: string; arguments: string }
+			>();
 
-		for await (const chunk of streamModel({
-			model: this.model,
-			messages: this.messages,
-			tools: getToolDefinitions(),
-		})) {
-			if (chunk.type === "text") {
-				assistantText += chunk.content;
-				this.bus.emit("agent:delta", { content: chunk.content });
-			} else {
-				for (const tc of chunk.toolCalls) {
-					const existing = toolCallMap.get(tc.index) ?? {
-						id: "",
-						name: "",
-						arguments: "",
-					};
-					if (tc.id) existing.id = tc.id;
-					if (tc.name) existing.name = tc.name;
-					if (tc.arguments) existing.arguments += tc.arguments;
-					toolCallMap.set(tc.index, existing);
-				}
-			}
-		}
-
-		const toolCalls = [...toolCallMap.values()];
-
-		if (toolCalls.length === 0) {
-			this.messages.push({ role: "assistant", content: assistantText });
-			this.bus.emit("agent:step_end", { turn });
-			this.bus.emit("agent:turn_end", { turn });
-			return;
-		}
-
-		const assistantToolCalls: ToolCall[] = toolCalls.map((tc) => ({
-			id: tc.id,
-			type: "function" as const,
-			function: { name: tc.name, arguments: tc.arguments },
-		}));
-		this.messages.push({
-			role: "assistant",
-			content: assistantText,
-			toolCalls: assistantToolCalls,
-		});
-
-		for (const tc of toolCalls) {
-			this.bus.emit("agent:tool_call", {
-				id: tc.id,
-				name: tc.name,
-				arguments: tc.arguments,
-			});
-
-			let args: Record<string, unknown> = {};
-			try {
-				args = tc.arguments ? JSON.parse(tc.arguments) : {};
-			} catch {
-				args = {};
-			}
-
-			const tool = getTool(tc.name);
-			let result: string;
-			if (!tool) {
-				result = `Error: unknown tool "${tc.name}"`;
-			} else {
-				try {
-					result = await tool.execute(args);
-				} catch (err) {
-					result = `Error: ${(err as Error).message}`;
+			for await (const chunk of streamModel({
+				model: this.model,
+				messages: this.messages,
+				tools: getToolDefinitions(),
+			})) {
+				if (chunk.type === "text") {
+					assistantText += chunk.content;
+					this.bus.emit("agent:delta", { content: chunk.content });
+				} else {
+					for (const tc of chunk.toolCalls) {
+						const existing = toolCallMap.get(tc.index) ?? {
+							id: "",
+							name: "",
+							arguments: "",
+						};
+						if (tc.id) existing.id = tc.id;
+						if (tc.name) existing.name = tc.name;
+						if (tc.arguments) existing.arguments += tc.arguments;
+						toolCallMap.set(tc.index, existing);
+					}
 				}
 			}
 
-			this.bus.emit("agent:tool_result", {
+			const toolCalls = [...toolCallMap.values()];
+
+			if (toolCalls.length === 0) {
+				this.messages.push({ role: "assistant", content: assistantText });
+				this.bus.emit("agent:turn_end", { turn });
+				return;
+			}
+
+			const assistantToolCalls: ToolCall[] = toolCalls.map((tc) => ({
 				id: tc.id,
-				name: tc.name,
-				result,
-			});
+				type: "function" as const,
+				function: { name: tc.name, arguments: tc.arguments },
+			}));
 			this.messages.push({
-				role: "tool",
-				content: result,
-				toolCallId: tc.id,
+				role: "assistant",
+				content: assistantText,
+				toolCalls: assistantToolCalls,
 			});
+
+			for (const tc of toolCalls) {
+				this.bus.emit("agent:tool_call", {
+					id: tc.id,
+					name: tc.name,
+					arguments: tc.arguments,
+				});
+
+				let args: Record<string, unknown> = {};
+				try {
+					args = tc.arguments ? JSON.parse(tc.arguments) : {};
+				} catch {
+					args = {};
+				}
+
+				const tool = getTool(tc.name);
+				let result: string;
+				if (!tool) {
+					result = `Error: unknown tool "${tc.name}"`;
+				} else {
+					try {
+						result = await tool.execute(args);
+					} catch (err) {
+						result = `Error: ${(err as Error).message}`;
+					}
+				}
+
+				this.bus.emit("agent:tool_result", {
+					id: tc.id,
+					name: tc.name,
+					result,
+				});
+				this.messages.push({
+					role: "tool",
+					content: result,
+					toolCallId: tc.id,
+				});
+			}
+
+			this.bus.emit("agent:turn_end", { turn });
+			turn++;
 		}
 
-		this.bus.emit("agent:step_end", { turn });
-		await this.runStep(turn + 1);
+		this.bus.emit("agent:error", {
+			error: `reached max turns (${this.maxTurns}), stopping`,
+		});
+		this.bus.emit("agent:turn_end", { turn });
 	}
 
 	get isRunning(): boolean {

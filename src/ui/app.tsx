@@ -90,11 +90,11 @@ function CodingAgent({
 			setEntries((prev) => [...prev, entry]);
 		};
 
-		const onTurnStart = () => {
+		const onTaskStart = () => {
 			setRunning(true);
 		};
 
-		const onStepStart = () => {
+		const onTurnStart = () => {
 			assistantBuffer.current = "";
 			const key = nextKey();
 			currentAssistantKey.current = key;
@@ -145,7 +145,7 @@ function CodingAgent({
 		});
 	};
 
-		const onStepEnd = () => {
+		const onTurnEnd = () => {
 			const key = currentAssistantKey.current;
 			if (key !== null) {
 				setEntries((prev) =>
@@ -160,11 +160,7 @@ function CodingAgent({
 			assistantBuffer.current = "";
 		};
 
-		const onTurnEnd = () => {
-			setRunning(false);
-		};
-
-		const onDone = () => {
+		const onTaskEnd = () => {
 			setRunning(false);
 		};
 
@@ -177,26 +173,24 @@ function CodingAgent({
 			pushEntry({ kind: "status", key: nextKey(), text: status });
 		};
 
+		bus.on("agent:task_start", onTaskStart);
 		bus.on("agent:turn_start", onTurnStart);
-		bus.on("agent:step_start", onStepStart);
 		bus.on("agent:delta", onDelta);
 		bus.on("agent:tool_call", onToolCall);
 		bus.on("agent:tool_result", onToolResult);
-		bus.on("agent:step_end", onStepEnd);
 		bus.on("agent:turn_end", onTurnEnd);
-		bus.on("agent:done", onDone);
+		bus.on("agent:task_end", onTaskEnd);
 		bus.on("agent:error", onError);
 		bus.on("agent:status", onStatus);
 
 		return () => {
+			bus.off("agent:task_start", onTaskStart);
 			bus.off("agent:turn_start", onTurnStart);
-			bus.off("agent:step_start", onStepStart);
 			bus.off("agent:delta", onDelta);
 			bus.off("agent:tool_call", onToolCall);
 			bus.off("agent:tool_result", onToolResult);
-			bus.off("agent:step_end", onStepEnd);
 			bus.off("agent:turn_end", onTurnEnd);
-			bus.off("agent:done", onDone);
+			bus.off("agent:task_end", onTaskEnd);
 			bus.off("agent:error", onError);
 			bus.off("agent:status", onStatus);
 		};
