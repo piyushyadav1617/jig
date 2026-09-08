@@ -10,6 +10,34 @@ import {
 import { buildSystemPrompt } from "@/system-prompt.ts";
 import type { Bus } from "@/ui/events.ts";
 
+type TaskContext = {
+	transcript: ModelMessage[];
+	controller: AbortController;
+};
+
+function cloneMessages(messages: ModelMessage[]): ModelMessage[] {
+	return messages.map((message) => {
+		if (message.role !== "assistant" || !message.toolCalls) {
+			return { ...message };
+		}
+
+		return {
+			...message,
+			toolCalls: message.toolCalls.map((toolCall) => ({
+				...toolCall,
+				function: { ...toolCall.function },
+			})),
+		};
+	});
+}
+
+function formatError(error: unknown): string {
+	if (error instanceof Error) return error.message;
+	if (typeof error === "string") return error;
+	if (error === undefined) return "Unknown error";
+	return String(error);
+}
+
 export interface AgentLoopOptions {
 	bus: Bus;
 	model?: string;
@@ -24,6 +52,7 @@ export class AgentLoop {
 	private readonly cwd: string;
 	private readonly messages: ModelMessage[] = [];
 	private running = false;
+	private activeTask?: TaskContext;
 
 	constructor(options: AgentLoopOptions) {
 		this.bus = options.bus;
@@ -43,10 +72,13 @@ export class AgentLoop {
 			void this.handleUserInput(input);
 		});
 		this.bus.on("user:clear", () => {
+			if (this.running) return;
+
 			this.resetHistory();
 			this.bus.emit("agent:status", { status: "history cleared" });
 		});
 		this.bus.on("user:exit", () => {
+			this.activeTask?.controller.abort();
 			this.bus.emit("agent:status", { status: "bye" });
 		});
 	}
@@ -69,27 +101,40 @@ export class AgentLoop {
 		const trimmed = input.trim();
 		if (!trimmed) return;
 
+		const task: TaskContext = {
+			transcript: cloneMessages(this.messages),
+			controller: new AbortController(),
+		};
+		task.transcript.push({ role: "user", content: trimmed });
+
 		this.running = true;
+		this.activeTask = task;
+		this.commitTask(task);
 		this.bus.emit("agent:task_start", { input: trimmed });
-		this.messages.push({ role: "user", content: trimmed });
 
 		try {
-			await this.runTask();
+			await this.runTask(task);
 		} catch (err) {
-			this.messages.pop();
-			this.bus.emit("agent:error", {
-				error: (err as Error).message,
-			});
+			if (!task.controller.signal.aborted) {
+				this.bus.emit("agent:error", { error: formatError(err) });
+			}
 		} finally {
 			this.running = false;
+			this.activeTask = undefined;
 			this.bus.emit("agent:task_end");
 		}
 	}
 
-	private async runTask(): Promise<void> {
+	private commitTask(task: TaskContext): void {
+		this.messages.length = 0;
+		this.messages.push(...cloneMessages(task.transcript));
+	}
+
+	private async runTask(task: TaskContext): Promise<void> {
 		let turn = 0;
 
 		while (turn < this.maxTurns) {
+			if (task.controller.signal.aborted) return;
 			this.bus.emit("agent:turn_start", { turn });
 
 			let assistantText = "";
@@ -100,8 +145,9 @@ export class AgentLoop {
 
 			for await (const chunk of streamModel({
 				model: this.model,
-				messages: this.messages,
+				messages: task.transcript,
 				tools: getToolDefinitions(),
+				signal: task.controller.signal,
 			})) {
 				if (chunk.type === "text") {
 					assistantText += chunk.content;
@@ -120,11 +166,13 @@ export class AgentLoop {
 					}
 				}
 			}
+			if (task.controller.signal.aborted) return;
 
 			const toolCalls = [...toolCallMap.values()];
 
 			if (toolCalls.length === 0) {
-				this.messages.push({ role: "assistant", content: assistantText });
+				task.transcript.push({ role: "assistant", content: assistantText });
+				this.commitTask(task);
 				this.bus.emit("agent:turn_end", { turn });
 				return;
 			}
@@ -134,7 +182,7 @@ export class AgentLoop {
 				type: "function" as const,
 				function: { name: tc.name, arguments: tc.arguments },
 			}));
-			this.messages.push({
+			task.transcript.push({
 				role: "assistant",
 				content: assistantText,
 				toolCalls: assistantToolCalls,
@@ -162,30 +210,30 @@ export class AgentLoop {
 					try {
 						result = await tool.execute(args);
 					} catch (err) {
-						result = `Error: ${(err as Error).message}`;
+						result = `Error: ${formatError(err)}`;
 					}
 				}
-
 				this.bus.emit("agent:tool_result", {
 					id: tc.id,
 					name: tc.name,
 					result,
 				});
-				this.messages.push({
+				task.transcript.push({
 					role: "tool",
 					content: result,
 					toolCallId: tc.id,
 				});
 			}
 
+			this.commitTask(task);
 			this.bus.emit("agent:turn_end", { turn });
 			turn++;
 		}
 
+		if (task.controller.signal.aborted) return;
 		this.bus.emit("agent:error", {
 			error: `reached max turns (${this.maxTurns}), stopping`,
 		});
-		this.bus.emit("agent:turn_end", { turn });
 	}
 
 	get isRunning(): boolean {

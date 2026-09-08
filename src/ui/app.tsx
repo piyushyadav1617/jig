@@ -145,7 +145,7 @@ function CodingAgent({
 		});
 	};
 
-		const onTurnEnd = () => {
+		const finishCurrentAssistant = () => {
 			const key = currentAssistantKey.current;
 			if (key !== null) {
 				setEntries((prev) =>
@@ -160,11 +160,16 @@ function CodingAgent({
 			assistantBuffer.current = "";
 		};
 
+		const onTurnEnd = () => {
+			finishCurrentAssistant();
+		};
+
 		const onTaskEnd = () => {
 			setRunning(false);
 		};
 
 		const onError = ({ error }: { error: string }) => {
+			finishCurrentAssistant();
 			pushEntry({ kind: "error", key: nextKey(), text: error });
 			setRunning(false);
 		};

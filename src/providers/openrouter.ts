@@ -29,6 +29,7 @@ export type StreamModelOptions = {
 	model: string;
 	messages: ModelMessage[];
 	tools?: ToolDefinition[];
+	signal?: AbortSignal;
 };
 
 const client = new OpenRouter({
@@ -39,6 +40,7 @@ export async function* streamModel({
 	model,
 	messages,
 	tools,
+	signal,
 }: StreamModelOptions): AsyncGenerator<StreamChunk, void, unknown> {
 	const result = await client.chat.send({
 		chatRequest: {
@@ -47,7 +49,7 @@ export async function* streamModel({
 			stream: true,
 			tools: tools && tools.length > 0 ? (tools as never) : undefined,
 		},
-	});
+	}, { signal });
 
 	if (!(result instanceof ReadableStream)) {
 		throw new Error("Expected a streaming response");
