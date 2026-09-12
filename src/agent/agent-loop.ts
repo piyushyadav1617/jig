@@ -1,14 +1,14 @@
 import {
-	streamModel,
-	type ModelMessage,
-	type ToolCall,
-} from "@/providers/openrouter.ts";
+	isStepCount,
+	type ModelMessage
+} from "ai";
+import { ModelManager } from "@/api/model-manager.ts";
 import {
-	getTool,
 	getToolDefinitions,
+	getTools,
 } from "@/tools/definition.ts";
-import { buildSystemPrompt } from "@/system-prompt.ts";
-import type { Bus } from "@/ui/events.ts";
+import { buildSystemPrompt } from "@/prompts/system-prompt";
+import type { Bus } from "@/events/bus";
 
 type TaskContext = {
 	transcript: ModelMessage[];
@@ -16,19 +16,7 @@ type TaskContext = {
 };
 
 function cloneMessages(messages: ModelMessage[]): ModelMessage[] {
-	return messages.map((message) => {
-		if (message.role !== "assistant" || !message.toolCalls) {
-			return { ...message };
-		}
-
-		return {
-			...message,
-			toolCalls: message.toolCalls.map((toolCall) => ({
-				...toolCall,
-				function: { ...toolCall.function },
-			})),
-		};
-	});
+	return structuredClone(messages);
 }
 
 function formatError(error: unknown): string {
@@ -38,16 +26,27 @@ function formatError(error: unknown): string {
 	return String(error);
 }
 
+function stringifyValue(value: unknown): string {
+	if (typeof value === "string") return value;
+	try {
+		return JSON.stringify(value) ?? String(value);
+	} catch {
+		return String(value);
+	}
+}
+
 export interface AgentLoopOptions {
 	bus: Bus;
 	model?: string;
+	modelManager?: ModelManager;
 	maxTurns?: number;
 	cwd?: string;
 }
 
 export class AgentLoop {
 	private readonly bus: Bus;
-	private readonly model: string;
+	private model: string;
+	private readonly modelManager: ModelManager;
 	private readonly maxTurns: number;
 	private readonly cwd: string;
 	private readonly messages: ModelMessage[] = [];
@@ -56,8 +55,10 @@ export class AgentLoop {
 
 	constructor(options: AgentLoopOptions) {
 		this.bus = options.bus;
-		this.model = options.model ?? process.env.MODEL ?? "";
-		this.maxTurns = options.maxTurns ?? 10;
+		this.modelManager =
+			options.modelManager ?? new ModelManager({ model: options.model });
+		this.model = options.model ?? this.modelManager.defaultModel;
+		this.maxTurns = options.maxTurns ?? 20;
 		this.cwd = options.cwd ?? process.cwd();
 		this.resetHistory();
 		this.bindUserEvents();
@@ -65,6 +66,13 @@ export class AgentLoop {
 
 	start(): void {
 		this.bus.emit("agent:status", { status: "ready" });
+	}
+
+	setModel(model: string): boolean {
+		if (this.running) return false;
+		this.model = model;
+		this.bus.emit("agent:status", { status: `model: ${model}` });
+		return true;
 	}
 
 	private bindUserEvents(): void {
@@ -137,96 +145,54 @@ export class AgentLoop {
 			if (task.controller.signal.aborted) return;
 			this.bus.emit("agent:turn_start", { turn });
 
-			let assistantText = "";
-			const toolCallMap = new Map<
-				number,
-				{ id: string; name: string; arguments: string }
-			>();
-
-			for await (const chunk of streamModel({
+			let streamError: unknown;
+			const result = await this.modelManager.streamText({
 				model: this.model,
 				messages: task.transcript,
-				tools: getToolDefinitions(),
-				signal: task.controller.signal,
-			})) {
-				if (chunk.type === "text") {
-					assistantText += chunk.content;
-					this.bus.emit("agent:delta", { content: chunk.content });
-				} else {
-					for (const tc of chunk.toolCalls) {
-						const existing = toolCallMap.get(tc.index) ?? {
-							id: "",
-							name: "",
-							arguments: "",
-						};
-						if (tc.id) existing.id = tc.id;
-						if (tc.name) existing.name = tc.name;
-						if (tc.arguments) existing.arguments += tc.arguments;
-						toolCallMap.set(tc.index, existing);
-					}
-				}
-			}
-			if (task.controller.signal.aborted) return;
-
-			const toolCalls = [...toolCallMap.values()];
-
-			if (toolCalls.length === 0) {
-				task.transcript.push({ role: "assistant", content: assistantText });
-				this.commitTask(task);
-				this.bus.emit("agent:turn_end", { turn });
-				return;
-			}
-
-			const assistantToolCalls: ToolCall[] = toolCalls.map((tc) => ({
-				id: tc.id,
-				type: "function" as const,
-				function: { name: tc.name, arguments: tc.arguments },
-			}));
-			task.transcript.push({
-				role: "assistant",
-				content: assistantText,
-				toolCalls: assistantToolCalls,
+				// The system prompt is created locally by jig and is trusted.
+				allowSystemInMessages: true,
+				tools: getTools(),
+				// Keep one model step per outer agent turn. The SDK executes any
+				// tool calls from that step and returns them in responseMessages.
+				stopWhen: isStepCount(1),
+				abortSignal: task.controller.signal,
+				onToolExecutionStart: ({ toolCall }) => {
+					this.bus.emit("agent:tool_call", {
+						id: toolCall.toolCallId,
+						name: toolCall.toolName,
+						arguments: stringifyValue(toolCall.input),
+					});
+				},
+				onToolExecutionEnd: ({ toolCall, toolOutput }) => {
+					const toolResult =
+						toolOutput.type === "tool-error"
+							? `Error: ${formatError(toolOutput.error)}`
+							: stringifyValue(toolOutput.output);
+					this.bus.emit("agent:tool_result", {
+						id: toolCall.toolCallId,
+						name: toolCall.toolName,
+						result: toolResult,
+					});
+				},
 			});
 
-			for (const tc of toolCalls) {
-				this.bus.emit("agent:tool_call", {
-					id: tc.id,
-					name: tc.name,
-					arguments: tc.arguments,
-				});
-
-				let args: Record<string, unknown> = {};
-				try {
-					args = tc.arguments ? JSON.parse(tc.arguments) : {};
-				} catch {
-					args = {};
+			for await (const chunk of result.stream) {
+				if (chunk.type === "text-delta") {
+					this.bus.emit("agent:delta", { content: chunk.text });
+				} else if (chunk.type === "error") {
+					streamError = chunk.error;
 				}
-
-				const tool = getTool(tc.name);
-				let result: string;
-				if (!tool) {
-					result = `Error: unknown tool "${tc.name}"`;
-				} else {
-					try {
-						result = await tool.execute(args);
-					} catch (err) {
-						result = `Error: ${formatError(err)}`;
-					}
-				}
-				this.bus.emit("agent:tool_result", {
-					id: tc.id,
-					name: tc.name,
-					result,
-				});
-				task.transcript.push({
-					role: "tool",
-					content: result,
-					toolCallId: tc.id,
-				});
 			}
+			if (streamError) throw streamError;
+			if (task.controller.signal.aborted) return;
+
+			const responseMessages = await result.responseMessages;
+			task.transcript.push(...responseMessages);
 
 			this.commitTask(task);
+			const toolCalls = await result.toolCalls;
 			this.bus.emit("agent:turn_end", { turn });
+			if (toolCalls.length === 0) return;
 			turn++;
 		}
 

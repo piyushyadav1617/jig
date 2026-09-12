@@ -4,7 +4,8 @@ import {
 } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
-import type { Bus } from "@/ui/events.ts";
+import type { Bus } from "@/events/bus";
+import type { ModelManager } from "@/api/model-manager.ts";
 import {
 	AssistantMessage,
 	ErrorView,
@@ -14,12 +15,15 @@ import {
 	ToolCallView,
 	ToolResultView,
 	UserInputView,
-} from "@/ui/components";
-import { theme } from "@/ui/theme.ts";
+} from "@/tui/components";
+import { ProviderDialog } from "@/tui/components/ProviderDialog.tsx";
+import { theme } from "@/tui/theme.ts";
 
 export interface AppOptions {
 	bus: Bus;
 	model: string;
+	modelManager: ModelManager;
+	onModelChange: (model: string) => boolean;
 }
 
 const { borders } = theme;
@@ -76,11 +80,21 @@ const sampleEntries: Entry[] = [
 function CodingAgent({
 	bus,
 	model,
+	modelManager,
+	onModelChange,
 	onExit,
-}: { bus: Bus; model: string; onExit: () => void }) {
+}: {
+	bus: Bus;
+	model: string;
+	modelManager: ModelManager;
+	onModelChange: (model: string) => boolean;
+	onExit: () => void;
+}) {
 	const [entries, setEntries] = useState<Entry[]>([]);
 	const [running, setRunning] = useState(false);
 	const [inputValue, setInputValue] = useState("");
+	const [activeModel, setActiveModel] = useState(model);
+	const [dialog, setDialog] = useState<"provider" | "models" | null>(null);
 	const currentAssistantKey = useRef<number | null>(null);
 	const assistantBuffer = useRef("");
 	const inputRef = useRef<{ focus: () => void } | null>(null);
@@ -208,6 +222,14 @@ function CodingAgent({
 		const input = value.trim();
 		setInputValue("");
 		if (!input) return;
+		if (input === "/provider") {
+			setDialog("provider");
+			return;
+		}
+		if (input === "/models") {
+			setDialog("models");
+			return;
+		}
 
 		if (input === "exit" || input === "quit") {
 			setEntries((prev) => [
@@ -231,8 +253,14 @@ function CodingAgent({
 		bus.emit("user:input", input);
 	};
 
+	const handleModelChange = (nextModel: string): boolean => {
+		if (!onModelChange(nextModel)) return false;
+		setActiveModel(nextModel);
+		return true;
+	};
+
 	return (
-		<box flexDirection="column" width="100%" height="100%">
+		<box position="relative" flexDirection="column" width="100%" height="100%">
 			<scrollbox
 				flexGrow={1}
 				stickyScroll={true}
@@ -290,14 +318,29 @@ function CodingAgent({
 				<input
 					ref={inputRef as never}
 					flexGrow={1}
-					focused
+					focused={!dialog}
 					placeholder='ask the agent  (exit to quit, clear to reset)'
 					value={inputValue}
 					onInput={setInputValue}
 					onSubmit={() => handleSubmit(inputValue)}
 				/>
 			</box>
-			<Spinner active={running} />
+			<box
+				flexDirection="row"
+				height={1}
+				width="100%"
+			>
+				<box flexGrow={1}>{running && <Spinner />}</box>
+				<text>{activeModel}</text>
+			</box>
+			{dialog && (
+				<ProviderDialog
+					modelManager={modelManager}
+					initialScreen={dialog === "provider" ? "providers" : "models"}
+					onClose={() => setDialog(null)}
+					onModelChange={handleModelChange}
+				/>
+			)}
 		</box>
 	);
 }
@@ -305,11 +348,15 @@ function CodingAgent({
 export class App {
 	private readonly bus: Bus;
 	private readonly model: string;
+	private readonly modelManager: ModelManager;
+	private readonly onModelChange: (model: string) => boolean;
 	private renderer?: CliRenderer;
 
 	constructor(options: AppOptions) {
 		this.bus = options.bus;
 		this.model = options.model;
+		this.modelManager = options.modelManager;
+		this.onModelChange = options.onModelChange;
 	}
 
 	stop(): void {
@@ -328,6 +375,8 @@ export class App {
 			<CodingAgent
 				bus={this.bus}
 				model={this.model}
+				modelManager={this.modelManager}
+				onModelChange={this.onModelChange}
 				onExit={() => this.stop()}
 			/>,
 		);

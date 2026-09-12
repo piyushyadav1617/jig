@@ -1,27 +1,19 @@
+import { tool } from "ai";
 import { readFile, writeFile } from "node:fs/promises";
-import type { Tool } from "./definition.ts";
+import { z } from "zod";
 
-export const editTool: Tool = {
-	name: "edit",
+export const editTool = tool({
 	description: "Replace an exact string in an existing file.",
-	parameters: {
-		type: "object",
-		properties: {
-			path: { type: "string", description: "Path to the file to edit" },
-			oldString: { type: "string", description: "Exact text to replace" },
-			newString: { type: "string", description: "Replacement text" },
-			replaceAll: {
-				type: "boolean",
-				description: "Replace every match instead of requiring one unique match",
-			},
-		},
-		required: ["path", "oldString", "newString"],
-	},
-	execute: async (args) => {
-		const path = args.path as string;
-		const oldString = args.oldString as string;
-		const newString = args.newString as string;
-		const replaceAll = args.replaceAll === true;
+	inputSchema: z.object({
+		path: z.string().describe("Path to the file to edit"),
+		oldString: z.string().describe("Exact text to replace"),
+		newString: z.string().describe("Replacement text"),
+		replaceAll: z
+			.boolean()
+			.optional()
+			.describe("Replace every match instead of requiring one unique match"),
+	}),
+	execute: async ({ path, oldString, newString, replaceAll = false }) => {
 		if (!path) throw new Error("path is required");
 		if (!oldString) throw new Error("oldString is required");
 		if (newString === undefined || newString === null) {
@@ -42,4 +34,4 @@ export const editTool: Tool = {
 
 		return JSON.stringify({ path, replacements: replaceAll ? matches : 1 });
 	},
-};
+});

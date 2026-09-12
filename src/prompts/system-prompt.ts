@@ -11,7 +11,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 
 	const toolList =
 		tools.length > 0
-			? tools.map((t) => `- ${t.function.name}: ${t.function.description}`).join("\n")
+			? tools.map((t) => `- ${t.name}: ${t.description}`).join("\n")
 			: "(none)";
 
 	const prompt =  `You are an expert coding assistant operating inside jig, a terminal-based coding agent. You help users by reading files, writing files, running commands, and editing code.

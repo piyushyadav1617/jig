@@ -1,4 +1,4 @@
-import { theme } from "@/ui/theme.ts";
+import { theme } from "@/tui/theme.ts";
 import { getFiletype, isMarkdown } from "../filetype.ts";
 
 const { markdownSyntaxStyle } = theme;

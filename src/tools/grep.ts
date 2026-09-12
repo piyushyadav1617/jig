@@ -1,34 +1,27 @@
+import { tool } from "ai";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
-import type { Tool } from "./definition.ts";
+import { z } from "zod";
 
 function globToRegExp(glob: string): RegExp {
 	const escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&");
 	return new RegExp(`^${escaped.replace(/\*/g, ".*").replace(/\?/g, ".")}$`);
 }
 
-export const grepTool: Tool = {
-	name: "grep",
+export const grepTool = tool({
 	description: "Search file contents with a regular expression.",
-	parameters: {
-		type: "object",
-		properties: {
-			pattern: { type: "string", description: "Regular expression to search for" },
-			path: {
-				type: "string",
-				description: "File or directory to search. Defaults to the current directory",
-			},
-			include: {
-				type: "string",
-				description: "Optional glob of files to include, such as *.ts",
-			},
-		},
-		required: ["pattern"],
-	},
-	execute: async (args) => {
-		const pattern = args.pattern as string;
-		const path = (args.path as string | undefined) ?? ".";
-		const include = args.include as string | undefined;
+	inputSchema: z.object({
+		pattern: z.string().describe("Regular expression to search for"),
+		path: z
+			.string()
+			.optional()
+			.describe("File or directory to search. Defaults to the current directory"),
+		include: z
+			.string()
+			.optional()
+			.describe("Optional glob of files to include, such as *.ts"),
+	}),
+	execute: async ({ pattern, path = ".", include }) => {
 		if (!pattern) throw new Error("pattern is required");
 
 		const expression = new RegExp(pattern);
@@ -67,4 +60,4 @@ export const grepTool: Tool = {
 
 		return JSON.stringify({ pattern, path, matches: matches.join("\n") });
 	},
-};
+});

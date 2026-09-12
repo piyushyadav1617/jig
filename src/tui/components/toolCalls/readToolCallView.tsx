@@ -1,4 +1,4 @@
-import { theme } from "@/ui/theme";
+import { theme } from "../../theme";
 
 const { colors } = theme;
 export function ReadToolCallView({ path }: { path: string }) {

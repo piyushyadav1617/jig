@@ -19,9 +19,13 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@openrouter/sdk": "^1.2.19",
+    "@ai-sdk/anthropic": "^4.0.53",
+    "@ai-sdk/openai": "^4.0.66",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
     "@opentui/core": "^0.5.1",
     "@opentui/react": "^0.5.1",
-    "react": "^19.2.6"
+    "ai": "^7.0.98",
+    "react": "^19.2.6",
+    "zod": "^4.6.2"
   }
 }

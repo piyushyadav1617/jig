@@ -1,40 +1,28 @@
-export interface Tool {
-	name: string;
-	description: string;
-	parameters: Record<string, unknown>;
-	execute: (args: Record<string, unknown>) => Promise<string>;
-}
+import type { Tool, ToolSet } from "ai";
 
 export type ToolDefinition = {
-	type: "function";
-	function: {
-		name: string;
-		description: string;
-		parameters: Record<string, unknown>;
-	};
+	name: string;
+	description: string;
 };
 
-const registry = new Map<string, Tool>();
+const registry: ToolSet = {};
 
-export function registerTool(tool: Tool): void {
-	registry.set(tool.name, tool);
+export function registerTool(name: string, tool: Tool): void {
+	registry[name] = tool;
 }
 
 export function getTool(name: string): Tool | undefined {
-	return registry.get(name);
+	return registry[name];
 }
 
-export function getTools(): Tool[] {
-	return [...registry.values()];
+export function getTools(): ToolSet {
+	return registry;
 }
 
 export function getToolDefinitions(): ToolDefinition[] {
-	return getTools().map((t) => ({
-		type: "function" as const,
-		function: {
-			name: t.name,
-			description: t.description,
-			parameters: t.parameters,
-		},
+	return Object.entries(registry).map(([name, tool]) => ({
+		name,
+		description:
+			tool && typeof tool.description === "string" ? tool.description : "",
 	}));
 }

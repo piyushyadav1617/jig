@@ -1,4 +1,4 @@
-import { theme } from "@/ui/theme";
+import { theme } from "../../theme";
 import { getFiletype, isMarkdown } from "../filetype";
 
 const { markdownSyntaxStyle, colors } = theme;
