@@ -35,6 +35,16 @@ const tb = (): BorderSides[] => ["top", "bottom"];
 
 export const theme = {
 	colors: c,
+	select: {
+		background: c.codeBg,
+		text: c.text,
+		focusedBackground: c.codeBg,
+		focusedText: c.text,
+		selectedBackground: c.codeBg,
+		selectedText: c.prompt,
+		description: c.textMuted,
+		selectedDescription: c.prompt,
+	},
 	borders: {
 		input: { sides: tb(), color: c.border },
 		userInput: { sides: tb(), color: c.borderDim },

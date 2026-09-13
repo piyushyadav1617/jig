@@ -2,7 +2,7 @@ import {
 	createCliRenderer,
 	type CliRenderer,
 } from "@opentui/core";
-import { createRoot } from "@opentui/react";
+import { createRoot, useKeyboard } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
 import type { Bus } from "@/events/bus";
 import type { ModelManager } from "@/api/model-manager.ts";
@@ -35,6 +35,26 @@ type Entry =
 	| { kind: "tool_result"; key: number; name: string; result: string }
 	| { kind: "status"; key: number; text: string }
 	| { kind: "error"; key: number; text: string };
+
+type Command = {
+	id: "clear" | "exit" | "models" | "providers";
+	name: string;
+	description: string;
+	aliases?: readonly string[];
+};
+
+// Add future slash commands here so they are immediately available in the picker.
+const commands: readonly Command[] = [
+	{ id: "clear", name: "/clear", description: "Clear the conversation", aliases: ["clear"] },
+	{ id: "exit", name: "/exit", description: "Exit jig", aliases: ["exit", "quit"] },
+	{ id: "models", name: "/models", description: "Choose an AI model" },
+	{
+		id: "providers",
+		name: "/providers",
+		description: "Configure an AI provider",
+		aliases: ["/provider", "provider"],
+	},
+];
 
 let entryKey = 0;
 const nextKey = () => ++entryKey;
@@ -93,11 +113,36 @@ function CodingAgent({
 	const [entries, setEntries] = useState<Entry[]>([]);
 	const [running, setRunning] = useState(false);
 	const [inputValue, setInputValue] = useState("");
+	const [commandIndex, setCommandIndex] = useState(0);
 	const [activeModel, setActiveModel] = useState(model);
 	const [dialog, setDialog] = useState<"provider" | "models" | null>(null);
 	const currentAssistantKey = useRef<number | null>(null);
 	const assistantBuffer = useRef("");
 	const inputRef = useRef<{ focus: () => void } | null>(null);
+	const commandSuggestions = inputValue.startsWith("/")
+		? commands.filter((command) =>
+				command.name.startsWith(inputValue.toLowerCase()),
+			)
+		: [];
+	const selectedCommand = commandSuggestions[commandIndex];
+
+	useEffect(() => {
+		if (commandIndex >= commandSuggestions.length) {
+			setCommandIndex(Math.max(0, commandSuggestions.length - 1));
+		}
+	}, [commandIndex, commandSuggestions.length]);
+
+	useKeyboard((key) => {
+		if (dialog || commandSuggestions.length === 0) return;
+		if (key.name === "up") {
+			setCommandIndex(
+				(index) => (index - 1 + commandSuggestions.length) % commandSuggestions.length,
+			);
+		}
+		if (key.name === "down") {
+			setCommandIndex((index) => (index + 1) % commandSuggestions.length);
+		}
+	});
 
 	useEffect(() => {
 		const pushEntry = (entry: Entry) => {
@@ -222,16 +267,20 @@ function CodingAgent({
 		const input = value.trim();
 		setInputValue("");
 		if (!input) return;
-		if (input === "/provider") {
+		const command = commands.find(
+			(candidate) =>
+				candidate.name === input || candidate.aliases?.includes(input),
+		);
+		if (command?.id === "providers") {
 			setDialog("provider");
 			return;
 		}
-		if (input === "/models") {
+		if (command?.id === "models") {
 			setDialog("models");
 			return;
 		}
 
-		if (input === "exit" || input === "quit") {
+		if (command?.id === "exit") {
 			setEntries((prev) => [
 				...prev,
 				{ kind: "status", key: nextKey(), text: "bye." },
@@ -240,7 +289,7 @@ function CodingAgent({
 		setTimeout(() => onExit(), 100);
 		return;
 		}
-		if (input === "clear") {
+		if (command?.id === "clear") {
 			setEntries([]);
 			bus.emit("user:clear");
 			return;
@@ -306,6 +355,12 @@ function CodingAgent({
 					}
 				})}
 			</scrollbox>
+			{commandSuggestions.length > 0 && (
+				<CommandDropdown
+					commands={commandSuggestions}
+					selectedIndex={commandIndex}
+				/>
+			)}
 			<box
 				flexDirection="row"
 				height={3}
@@ -321,8 +376,11 @@ function CodingAgent({
 					focused={!dialog}
 					placeholder='ask the agent  (exit to quit, clear to reset)'
 					value={inputValue}
-					onInput={setInputValue}
-					onSubmit={() => handleSubmit(inputValue)}
+					onInput={(value) => {
+						setInputValue(value);
+						setCommandIndex(0);
+					}}
+					onSubmit={() => handleSubmit(selectedCommand?.name ?? inputValue)}
 				/>
 			</box>
 			<box
@@ -341,6 +399,59 @@ function CodingAgent({
 					onModelChange={handleModelChange}
 				/>
 			)}
+		</box>
+	);
+}
+
+function CommandDropdown({
+	commands,
+	selectedIndex,
+}: {
+	commands: readonly Command[];
+	selectedIndex: number;
+}) {
+	return (
+		<box
+			position="absolute"
+			left={2}
+			bottom={4}
+			zIndex={5}
+			flexDirection="column"
+			width={48}
+			paddingLeft={1}
+			paddingRight={1}
+			backgroundColor={theme.colors.codeBg}
+			overflow="hidden"
+			// Header, visible commands, and the two border rows.
+			height={commands.length + 3}
+			style={{
+				border: ["top", "right", "bottom", "left"],
+				borderColor: borders.input.color,
+			}}
+		>
+			<text height={1}>
+				<span fg={theme.colors.textMuted}>Commands</span>
+			</text>
+			<select
+				width="100%"
+				height={commands.length}
+				options={commands.map((command) => ({
+					name: command.name,
+					description: command.description,
+					value: command.id,
+				}))}
+				selectedIndex={selectedIndex}
+				focused={false}
+				showDescription={false}
+				backgroundColor={theme.select.background}
+				textColor={theme.select.text}
+				focusedBackgroundColor={theme.select.focusedBackground}
+				focusedTextColor={theme.select.focusedText}
+				selectedBackgroundColor={theme.select.selectedBackground}
+				selectedTextColor={theme.select.selectedText}
+				descriptionColor={theme.select.description}
+				selectedDescriptionColor={theme.select.selectedDescription}
+			/>
 		</box>
 	);
 }
