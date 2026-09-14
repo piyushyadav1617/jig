@@ -2,7 +2,7 @@
   "name": "jig",
   "module": "src/index.ts",
   "type": "module",
-  "private": true,
+  "private": false,
   "bin": {
     "jig": "src/index.ts"
   },

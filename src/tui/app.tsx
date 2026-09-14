@@ -43,7 +43,6 @@ type Command = {
 	aliases?: readonly string[];
 };
 
-// Add future slash commands here so they are immediately available in the picker.
 const commands: readonly Command[] = [
 	{ id: "clear", name: "/clear", description: "Clear the conversation", aliases: ["clear"] },
 	{ id: "exit", name: "/exit", description: "Exit jig", aliases: ["exit", "quit"] },
