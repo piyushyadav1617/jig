@@ -5,138 +5,74 @@
 # jig
 
 `jig` is a terminal coding agent that uses an LLM to inspect and modify a
-repository. It can read files, search a codebase, edit files, write new files,
-and run shell commands through a streaming OpenRouter conversation.
+repository. It can read, search, edit, and write files, and run shell commands
+through a streaming conversation.
 
-> jig is experimental software. Run it only in a working directory where you
-> are comfortable allowing an AI agent to operate.
-
-## Features
-
-- Interactive terminal UI built with [OpenTUI](https://github.com/anomalyco/opentui)
-- Streaming model responses through [OpenRouter](https://openrouter.ai/)
-- Multi-step tool execution for coding tasks
-- File reading, writing, exact-string editing, and regular-expression search
-- In-memory conversation history for the current session
-- `clear`, `exit`, and `quit` commands
+> Experimental software. Run jig only in a working directory where you are
+> comfortable allowing an AI agent to operate.
 
 ## Requirements
 
-- [Bun](https://bun.sh/) 1.3 or newer
-- An OpenRouter API key
+- `curl` on macOS or Linux
+- An API key for [OpenAI](https://platform.openai.com/),
+  [Anthropic](https://console.anthropic.com/), or
+  [OpenRouter](https://openrouter.ai/)
 
-## Installation
+## Install
 
-Clone the repository and install dependencies:
+```sh
+curl -fsSL https://raw.githubusercontent.com/piyushyadav1617/jig/main/install.sh | sh
+```
 
-```bash
+## Run
+
+```sh
+jig
+```
+
+For development from the source repository, install
+[Bun](https://bun.sh/) and run:
+
+```sh
 bun install
-```
-
-Set the required environment variable:
-
-```bash
-export OPENROUTER_API_KEY="your-api-key"
-```
-
-You can also put configuration in a `.env` file at the project root:
-
-```dotenv
-OPENROUTER_API_KEY=your-api-key
-MODEL=north-mini-code:free
-```
-
-`MODEL` is optional. The default model is `north-mini-code:free`.
-
-## Usage
-
-Start jig with:
-
-```bash
 bun run start
-```
 
-Start in watch mode during development:
-
-```bash
+# Watch for source changes
 bun run dev
 ```
 
-Then enter a task at the prompt, for example:
+On first use, enter `/providers` to connect a provider with an API key. Keys
+are stored in `~/.config/jig/auth.json`. Set `JIG_AUTH_FILE` to use a different
+file, or set `XDG_CONFIG_HOME` to change the config directory.
 
-```text
-Read src/index.ts and explain how the application starts.
+The default model is `openrouter/inclusionai/ling-3.0-flash-fin:free`. Override
+it with `MODEL`:
+
+```bash
+MODEL=openai/gpt-5 jig
 ```
 
-Built-in input commands:
+## Commands
 
 | Command | Action |
 | --- | --- |
-| `clear` | Clear the current conversation history |
-| `exit` | Exit jig |
-| `quit` | Exit jig |
+| `/providers` | Connect or switch providers |
+| `/models` | Choose a model |
+| `/clear` | Clear conversation history |
+| `/exit` | Exit jig |
 
-## Available Tools
+`exit` and `quit` are also supported as aliases for `/exit`.
 
-| Tool | Description |
-| --- | --- |
-| `read` | Read a file and return its contents |
-| `write` | Create or replace a file, including missing parent directories |
-| `edit` | Replace an exact string in an existing file |
-| `grep` | Search files with a regular expression |
-| `bash` | Run a shell command and return its exit code, stdout, and stderr |
+## Tools
 
-## How It Works
+- `read` Read a file
+- `write` Create or replace a file
+- `edit` Replace an exact string in a file
+- `grep` Search files with a regular expression
+- `bash` Run a shell command
 
-Each user request is handled as one turn. A turn can contain multiple model
-steps:
+## Development
 
-```text
-User request
-    |
-    v
-Model response -> Tool call -> Tool result
-    ^                          |
-    |__________________________|
-    |
-    v
-Final model response
+```bash
+bun run typecheck
 ```
-
-The agent keeps the conversation in memory, sends the current messages and tool
-definitions to the model, executes requested tools, and feeds each result back
-into the next model step.
-
-## Project Structure
-
-```text
-src/
-  agent/           Agent loop and conversation state
-  providers/       LLM provider adapters
-  tools/           Tool implementations and registry
-  ui/              OpenTUI application and components
-  system-prompt.ts System prompt construction
-logo.png           Project logo
-plan.md            Development roadmap
-```
-
-## Development Commands
-
-| Command | Description |
-| --- | --- |
-| `bun install` | Install dependencies |
-| `bun run start` | Run jig |
-| `bun run dev` | Run jig with file watching |
-
-## Safety Notes
-
-The current prototype gives the model access to shell execution and filesystem
-tools. Commands and paths are not yet fully sandboxed, and destructive actions
-do not have an approval prompt. Use a trusted repository and review changes
-before committing them.
-
-## Roadmap
-
-Planned improvements include safer tool permissions, workspace path validation,
-context compaction, cancellation and timeouts, provider abstraction, retries,
-cost tracking, and persistent session history.
