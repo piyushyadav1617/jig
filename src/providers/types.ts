@@ -13,6 +13,7 @@ export type ProviderDefinition = {
 	displayName: string;
 	description: string;
 	models: readonly ModelDefinition[];
+	requiresAuthentication?: boolean;
 	createModel: (options: {
 		modelId: string;
 		apiKey: string;

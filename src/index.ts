@@ -10,7 +10,7 @@ import { App } from "@/tui/app.tsx";
 import { ModelManager } from "@/api/model-manager.ts";
 
 const modelManager = new ModelManager();
-const MODEL = modelManager.defaultModel;
+const MODEL = await modelManager.getStartupModel();
 
 registerTool("bash", bashTool);
 registerTool("edit", editTool);
@@ -23,7 +23,17 @@ const app = new App({
 	bus,
 	model: MODEL,
 	modelManager,
-	onModelChange: (model) => agentLoop.setModel(model),
+	onModelChange: (model) => {
+		const changed = agentLoop.setModel(model);
+		if (changed) {
+			void modelManager.saveSelectedModel(model).catch(() => {
+				bus.emit("agent:status", {
+					status: "could not save selected model",
+				});
+			});
+		}
+		return changed;
+	},
 });
 
 await app.start();

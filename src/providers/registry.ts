@@ -1,4 +1,5 @@
 import { getAnthropicModel } from "@/providers/anthropic.ts";
+import { getJigModel } from "@/providers/jig.ts";
 import { getOpenAIModel } from "@/providers/openai.ts";
 import { getOpenRouterModel } from "@/providers/openrouter.ts";
 import type {
@@ -9,6 +10,45 @@ import type {
 
 export const OPENROUTER_DEFAULT_MODEL =
 	"inclusionai/ling-3.0-flash-fin:free";
+export const JIG_DEFAULT_MODEL = `jig/${OPENROUTER_DEFAULT_MODEL}`;
+
+const jigModels: readonly ModelDefinition[] = [
+	{
+		id: "inclusionai/ling-3.0-flash-vl:free",
+		displayName: "Ling 3.0 Flash VL",
+		description: "Multimodal coding and reasoning model.",
+	},
+	{
+		id: "inclusionai/ling-3.0-flash-sante:free",
+		displayName: "Ling 3.0 Flash Sante",
+		description: "Fast text model with tool calling.",
+	},
+	{
+		id: "nex-agi/nex-n2.5-mini:free",
+		displayName: "Nex-N2.5-Mini",
+		description: "Agentic coding model with tool calling.",
+	},
+	{
+		id: "nex-agi/nex-n2.5-pro:free",
+		displayName: "Nex-N2.5-Pro",
+		description: "More capable agentic coding model with tool calling.",
+	},
+	{
+		id: "nvidia/nemotron-3.5-lightning:free",
+		displayName: "Nemotron 3.5 Lightning",
+		description: "Fast text model with tool calling.",
+	},
+	{
+		id: "inclusionai/ling-3.0-flash-fin:free",
+		displayName: "Ling 3.0 Flash Fin",
+		description: "Fast text model with tool calling.",
+	},
+	{
+		id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+		displayName: "Nemotron 3 Nano Omni",
+		description: "Multimodal reasoning model with tool calling.",
+	},
+];
 
 const openAIModels: readonly ModelDefinition[] = [
 	{
@@ -60,6 +100,14 @@ const openRouterModels: readonly ModelDefinition[] = [
 ];
 
 export const providerDefinitions: readonly ProviderDefinition[] = [
+	{
+		id: "jig",
+		displayName: "Jig Hosted",
+		description: "Use Jig's hosted OpenRouter proxy.",
+		models: jigModels,
+		requiresAuthentication: false,
+		createModel: ({ modelId }) => getJigModel(modelId),
+	},
 	{
 		id: "openai",
 		displayName: "OpenAI",

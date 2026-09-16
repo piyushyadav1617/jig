@@ -4,7 +4,8 @@ import {
 	type ToolSet,
 } from "ai";
 import { CredentialManager } from "@/credentials/manager.ts";
-import { providerRegistry, OPENROUTER_DEFAULT_MODEL } from "@/providers/registry.ts";
+import { ConfigManager } from "@/config/manager.ts";
+import { providerRegistry, JIG_DEFAULT_MODEL } from "@/providers/registry.ts";
 
 type StreamTextOptions = Omit<
 	Parameters<typeof streamText>[0],
@@ -16,15 +17,32 @@ type StreamTextOptions = Omit<
 
 export class ModelManager {
 	private readonly credentials: CredentialManager;
+	private readonly config: ConfigManager;
 	private readonly providers = providerRegistry;
+	private readonly modelOverride?: string;
 	readonly defaultModel: string;
 
-	constructor(options: { credentials?: CredentialManager; model?: string } = {}) {
+	constructor(
+		options: {
+			credentials?: CredentialManager;
+			config?: ConfigManager;
+			model?: string;
+		} = {},
+	) {
 		this.credentials = options.credentials ?? new CredentialManager();
-		this.defaultModel =
-			options.model ??
-			process.env.MODEL ??
-			`openrouter/${OPENROUTER_DEFAULT_MODEL}`;
+		this.config = options.config ?? new ConfigManager();
+		this.modelOverride = options.model ?? process.env.MODEL;
+		this.defaultModel = this.modelOverride ?? JIG_DEFAULT_MODEL;
+	}
+
+	async getStartupModel(): Promise<string> {
+		return this.modelOverride ??
+			(await this.config.getDefaultModel()) ??
+			this.defaultModel;
+	}
+
+	async saveSelectedModel(model: string): Promise<void> {
+		await this.config.setDefaultModel(model);
 	}
 
 	listProviders() {
@@ -32,6 +50,7 @@ export class ModelManager {
 	}
 
 	async isAuthenticated(providerId: string): Promise<boolean> {
+		if (this.providers.get(providerId).requiresAuthentication === false) return true;
 		return (await this.credentials.get(providerId)) !== undefined;
 	}
 
@@ -47,15 +66,17 @@ export class ModelManager {
 		const { providerId, modelId } =
 			this.providers.parseModelReference(reference);
 		const provider = this.providers.get(providerId);
-		const credential = await this.credentials.require(providerId);
+		const credential = provider.requiresAuthentication === false
+			? undefined
+			: await this.credentials.require(providerId);
 
-		if (credential.type !== "api_key") {
+		if (credential && credential.type !== "api_key") {
 			throw new Error(
 				`provider "${providerId}" does not support ${credential.type} credentials yet`,
 			);
 		}
 
-		return provider.createModel({ modelId, apiKey: credential.key });
+		return provider.createModel({ modelId, apiKey: credential?.key ?? "" });
 	}
 
 	async streamText(options: StreamTextOptions) {
