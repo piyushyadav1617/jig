@@ -81,12 +81,13 @@ export class ModelManager {
 
 	async streamText(options: StreamTextOptions) {
 		const { model, ...request } = options;
-		return this.getModel(model).then((languageModel) =>
-			streamText({
+		return this.getModel(model).then((languageModel) => {
+			request.abortSignal?.throwIfAborted();
+			return streamText({
 				...request,
 				model: languageModel,
-			}),
-		);
+			});
+		});
 	}
 }
 

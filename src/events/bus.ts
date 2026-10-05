@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 export type AgentEventMap = {
 	"user:input": [input: string];
 	"user:exit": [];
+	"user:cancel": [];
 	"user:clear": [];
 
 	"agent:task_start": [{ input: string }];

@@ -24,6 +24,7 @@ export interface AppOptions {
 	model: string;
 	modelManager: ModelManager;
 	onModelChange: (model: string) => boolean;
+	onExit: () => Promise<void>;
 }
 
 const { borders } = theme;
@@ -37,7 +38,7 @@ type Entry =
 	| { kind: "error"; key: number; text: string };
 
 type Command = {
-	id: "clear" | "exit" | "models" | "providers";
+	id: "clear" | "exit" | "esc" | "models" | "providers";
 	name: string;
 	description: string;
 	aliases?: readonly string[];
@@ -46,6 +47,7 @@ type Command = {
 const commands: readonly Command[] = [
 	{ id: "clear", name: "/clear", description: "Clear the conversation", aliases: ["clear"] },
 	{ id: "exit", name: "/exit", description: "Exit jig", aliases: ["exit", "quit"] },
+	{ id: "esc", name: "/esc", description: "Stop the current task", aliases: ["esc"] },
 	{ id: "models", name: "/models", description: "Choose an AI model" },
 	{
 		id: "providers",
@@ -117,7 +119,7 @@ function CodingAgent({
 	const [dialog, setDialog] = useState<"provider" | "models" | null>(null);
 	const currentAssistantKey = useRef<number | null>(null);
 	const assistantBuffer = useRef("");
-	const inputRef = useRef<{ focus: () => void } | null>(null);
+	const inputRef = useRef<{ focus: () => void; value: string } | null>(null);
 	const commandSuggestions = inputValue.startsWith("/")
 		? commands.filter((command) =>
 				command.name.startsWith(inputValue.toLowerCase()),
@@ -132,6 +134,16 @@ function CodingAgent({
 	}, [commandIndex, commandSuggestions.length]);
 
 	useKeyboard((key) => {
+		if (key.ctrl && key.name === "c") {
+			key.preventDefault();
+			onExit();
+			return;
+		}
+		if (key.name === "escape" && !dialog) {
+			key.preventDefault();
+			bus.emit("user:cancel");
+			return;
+		}
 		if (dialog || commandSuggestions.length === 0) return;
 		if (key.name === "up") {
 			setCommandIndex(
@@ -223,6 +235,7 @@ function CodingAgent({
 		};
 
 		const onTaskEnd = () => {
+			finishCurrentAssistant();
 			setRunning(false);
 		};
 
@@ -260,16 +273,25 @@ function CodingAgent({
 	}, [bus]);
 
 	const handleSubmit = (value: string) => {
-		if (running) return;
-		// TODO: The user might send commands while the agent is still processing a previous request. 
-		// We should queue them up and process them in order, rather than ignoring them.
 		const input = value.trim();
-		setInputValue("");
 		if (!input) return;
 		const command = commands.find(
 			(candidate) =>
 				candidate.name === input || candidate.aliases?.includes(input),
 		);
+		if (command?.id === "exit") {
+			onExit();
+			return;
+		}
+		if (command?.id === "esc") {
+			if (inputRef.current) inputRef.current.value = "";
+			setInputValue("");
+			bus.emit("user:cancel");
+			return;
+		}
+		if (running) return;
+		if (inputRef.current) inputRef.current.value = "";
+		setInputValue("");
 		if (command?.id === "providers") {
 			setDialog("provider");
 			return;
@@ -279,15 +301,6 @@ function CodingAgent({
 			return;
 		}
 
-		if (command?.id === "exit") {
-			setEntries((prev) => [
-				...prev,
-				{ kind: "status", key: nextKey(), text: "bye." },
-			]);
-		bus.emit("user:exit");
-		setTimeout(() => onExit(), 100);
-		return;
-		}
 		if (command?.id === "clear") {
 			setEntries([]);
 			bus.emit("user:clear");
@@ -373,13 +386,16 @@ function CodingAgent({
 					ref={inputRef as never}
 					flexGrow={1}
 					focused={!dialog}
-					placeholder='ask the agent  (exit to quit, clear to reset)'
+					placeholder='ask the agent  (Esc: stop, Ctrl+C: exit, /clear: reset)'
 					value={inputValue}
 					onInput={(value) => {
 						setInputValue(value);
 						setCommandIndex(0);
 					}}
-					onSubmit={() => handleSubmit(selectedCommand?.name ?? inputValue)}
+					onSubmit={() => {
+						const value = inputRef.current?.value ?? inputValue;
+						handleSubmit(value === inputValue ? selectedCommand?.name ?? value : value);
+					}}
 				/>
 			</box>
 			<box
@@ -461,18 +477,31 @@ export class App {
 	private readonly modelManager: ModelManager;
 	private readonly onModelChange: (model: string) => boolean;
 	private renderer?: CliRenderer;
+	private readonly onExit: () => Promise<void>;
+	private stopping?: Promise<void>;
 
 	constructor(options: AppOptions) {
 		this.bus = options.bus;
 		this.model = options.model;
 		this.modelManager = options.modelManager;
 		this.onModelChange = options.onModelChange;
+		this.onExit = options.onExit;
 	}
 
-	stop(): void {
-		this.renderer?.destroy();
-		process.exit(0);
+	stop(): Promise<void> {
+		return this.stopping ??= (async () => {
+			this.bus.emit("user:exit");
+			try {
+				await this.onExit();
+			} finally {
+				process.off("SIGINT", this.handleSignal);
+				process.off("SIGTERM", this.handleSignal);
+				this.renderer?.destroy();
+			}
+		})();
 	}
+
+	private readonly handleSignal = () => { void this.stop(); };
 
 	async start(): Promise<void> {
 		const renderer: CliRenderer = await createCliRenderer({
@@ -480,6 +509,8 @@ export class App {
 			targetFps: 60,
 		});
 		this.renderer = renderer;
+		process.on("SIGINT", this.handleSignal);
+		process.on("SIGTERM", this.handleSignal);
 		renderer.setTerminalTitle(`jig · ${this.model}`);
 		createRoot(renderer).render(
 			<CodingAgent
@@ -487,7 +518,7 @@ export class App {
 				model={this.model}
 				modelManager={this.modelManager}
 				onModelChange={this.onModelChange}
-				onExit={() => this.stop()}
+				onExit={() => { void this.stop(); }}
 			/>,
 		);
 	}

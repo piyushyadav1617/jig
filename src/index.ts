@@ -23,6 +23,7 @@ const app = new App({
 	bus,
 	model: MODEL,
 	modelManager,
+	onExit: () => agentLoop.stop(),
 	onModelChange: (model) => {
 		const changed = agentLoop.setModel(model);
 		if (changed) {

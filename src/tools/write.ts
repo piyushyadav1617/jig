@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { z } from "zod";
+import { FILE_TOOL_TIMEOUT_MS, withToolSignal } from "./execution.ts";
 
 export const writeTool = tool({
 	description:
@@ -10,7 +11,7 @@ export const writeTool = tool({
 		path: z.string().describe("Path to the file to write"),
 		content: z.string().describe("The full content to write to the file"),
 	}),
-	execute: async ({ path, content }) => {
+	execute: async ({ path, content }, { abortSignal }) => withToolSignal(abortSignal, FILE_TOOL_TIMEOUT_MS, async (signal) => {
 		if (!path) throw new Error("path is required");
 		if (content === undefined || content === null) throw new Error("content is required");
 
@@ -18,8 +19,9 @@ export const writeTool = tool({
 		if (dir && dir !== ".") {
 			await mkdir(dir, { recursive: true });
 		}
-		await writeFile(path, content, "utf-8");
+		signal.throwIfAborted();
+		await writeFile(path, content, { encoding: "utf-8", signal });
 		const lines = content.split("\n").length;
 		return JSON.stringify({ path, lines, content });
-	},
+	}),
 });

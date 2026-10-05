@@ -9,6 +9,7 @@ import {
 } from "@/tools/definition.ts";
 import { buildSystemPrompt } from "@/prompts/system-prompt";
 import type { Bus } from "@/events/bus";
+import { waitForToolExecutions } from "@/tools/execution.ts";
 
 type TaskContext = {
 	transcript: ModelMessage[];
@@ -52,6 +53,8 @@ export class AgentLoop {
 	private readonly messages: ModelMessage[] = [];
 	private running = false;
 	private activeTask?: TaskContext;
+	private activeCompletion?: Promise<void>;
+	private stopped = false;
 
 	constructor(options: AgentLoopOptions) {
 		this.bus = options.bus;
@@ -69,7 +72,7 @@ export class AgentLoop {
 	}
 
 	setModel(model: string): boolean {
-		if (this.running) return false;
+		if (this.running || this.stopped) return false;
 		this.model = model;
 		this.bus.emit("agent:status", { status: `model: ${model}` });
 		return true;
@@ -77,7 +80,9 @@ export class AgentLoop {
 
 	private bindUserEvents(): void {
 		this.bus.on("user:input", (input) => {
-			void this.handleUserInput(input);
+			if (!this.running && !this.stopped) {
+				this.activeCompletion = this.handleUserInput(input);
+			}
 		});
 		this.bus.on("user:clear", () => {
 			if (this.running) return;
@@ -86,9 +91,21 @@ export class AgentLoop {
 			this.bus.emit("agent:status", { status: "history cleared" });
 		});
 		this.bus.on("user:exit", () => {
-			this.activeTask?.controller.abort();
-			this.bus.emit("agent:status", { status: "bye" });
+			void this.stop();
 		});
+		this.bus.on("user:cancel", () => this.cancel());
+	}
+
+	cancel(): void {
+		if (!this.activeTask || this.activeTask.controller.signal.aborted) return;
+		this.activeTask.controller.abort();
+		this.bus.emit("agent:status", { status: "task interrupted" });
+	}
+
+	async stop(): Promise<void> {
+		this.stopped = true;
+		this.cancel();
+		await this.activeCompletion;
 	}
 
 	private resetHistory(): void {
@@ -103,7 +120,7 @@ export class AgentLoop {
 	}
 
 	private async handleUserInput(input: string): Promise<void> {
-		if (this.running) return;
+		if (this.running || this.stopped) return;
 		// TODO: User can send commands or extra messages for interruption or some other action
 		// So no need to return immediately while the agent is running, we can perform side tasks
 		const trimmed = input.trim();
@@ -127,6 +144,7 @@ export class AgentLoop {
 				this.bus.emit("agent:error", { error: formatError(err) });
 			}
 		} finally {
+			await waitForToolExecutions();
 			this.running = false;
 			this.activeTask = undefined;
 			this.bus.emit("agent:task_end");
@@ -157,6 +175,7 @@ export class AgentLoop {
 				stopWhen: isStepCount(1),
 				abortSignal: task.controller.signal,
 				onToolExecutionStart: ({ toolCall }) => {
+					if (task.controller.signal.aborted) return;
 					this.bus.emit("agent:tool_call", {
 						id: toolCall.toolCallId,
 						name: toolCall.toolName,
@@ -164,6 +183,7 @@ export class AgentLoop {
 					});
 				},
 				onToolExecutionEnd: ({ toolCall, toolOutput }) => {
+					if (task.controller.signal.aborted) return;
 					const toolResult =
 						toolOutput.type === "tool-error"
 							? `Error: ${formatError(toolOutput.error)}`
@@ -177,6 +197,7 @@ export class AgentLoop {
 			});
 
 			for await (const chunk of result.stream) {
+				if (task.controller.signal.aborted) continue;
 				if (chunk.type === "text-delta") {
 					this.bus.emit("agent:delta", { content: chunk.text });
 				} else if (chunk.type === "error") {
