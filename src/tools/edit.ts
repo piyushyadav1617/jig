@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { readFile, writeFile } from "node:fs/promises";
 import { z } from "zod";
+import { createTwoFilesPatch } from "diff";
 import { FILE_TOOL_TIMEOUT_MS, withToolSignal } from "./execution.ts";
 
 export const editTool = tool({
@@ -34,6 +35,10 @@ export const editTool = tool({
 		signal.throwIfAborted();
 		await writeFile(path, updated, { encoding: "utf-8", signal });
 
-		return JSON.stringify({ path, replacements: replaceAll ? matches : 1 });
+		return JSON.stringify({
+			path,
+			replacements: replaceAll ? matches : 1,
+			diff: createTwoFilesPatch(path, path, content, updated),
+		});
 	}),
 });

@@ -4,8 +4,12 @@ export function getFiletype(path: string): string | undefined {
 	const ext = extname(path).toLowerCase();
 	const map: Record<string, string> = {
 		".ts": "typescript",
+		".mts": "typescript",
+		".cts": "typescript",
 		".tsx": "typescriptreact",
 		".js": "javascript",
+		".mjs": "javascript",
+		".cjs": "javascript",
 		".jsx": "javascriptreact",
 		".json": "json",
 		".py": "python",
@@ -15,10 +19,13 @@ export function getFiletype(path: string): string | undefined {
 		".css": "css",
 		".sh": "bash",
 		".bash": "bash",
+		".zig": "zig",
+		".md": "markdown",
+		".markdown": "markdown",
 	};
 	return map[ext];
 }
 
 export function isMarkdown(path: string): boolean {
-	return extname(path).toLowerCase() === ".md";
+	return getFiletype(path) === "markdown";
 }

@@ -61,7 +61,7 @@ export class AgentLoop {
 		this.modelManager =
 			options.modelManager ?? new ModelManager({ model: options.model });
 		this.model = options.model ?? this.modelManager.defaultModel;
-		this.maxTurns = options.maxTurns ?? 20;
+		this.maxTurns = options.maxTurns ?? 100;
 		this.cwd = options.cwd ?? process.cwd();
 		this.resetHistory();
 		this.bindUserEvents();
@@ -200,6 +200,12 @@ export class AgentLoop {
 				if (task.controller.signal.aborted) continue;
 				if (chunk.type === "text-delta") {
 					this.bus.emit("agent:delta", { content: chunk.text });
+				} else if (chunk.type === "reasoning-start") {
+					this.bus.emit("agent:reasoning_start", { id: chunk.id });
+				} else if (chunk.type === "reasoning-delta") {
+					this.bus.emit("agent:reasoning_delta", { id: chunk.id, content: chunk.text });
+				} else if (chunk.type === "reasoning-end") {
+					this.bus.emit("agent:reasoning_end", { id: chunk.id });
 				} else if (chunk.type === "error") {
 					streamError = chunk.error;
 				}

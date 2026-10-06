@@ -9,6 +9,9 @@ export type AgentEventMap = {
 	"agent:task_start": [{ input: string }];
 	"agent:turn_start": [{ turn: number }];
 	"agent:delta": [{ content: string }];
+	"agent:reasoning_start": [{ id: string }];
+	"agent:reasoning_delta": [{ id: string; content: string }];
+	"agent:reasoning_end": [{ id: string }];
 	"agent:tool_call": [{ id: string; name: string; arguments: string }];
 	"agent:tool_result": [{ id: string; name: string; result: string }];
 	"agent:turn_end": [{ turn: number }];

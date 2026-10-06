@@ -1,6 +1,6 @@
-import { ReadToolCallView } from "./toolCalls/readToolCallView.tsx";
-import { WriteToolCallView } from "./toolCalls/writeToolCallView.tsx";
-import { GenericToolCallView } from "./toolCalls/genericToolCallView.tsx";
+import { useMemo, useState } from "react";
+import { theme } from "../theme.ts";
+import { ToolContentView, ToolPreviewView, toolSummary } from "./ToolContentView.tsx";
 
 function tryParse(args: string): Record<string, unknown> | undefined {
 	try {
@@ -17,18 +17,43 @@ function tryParse(args: string): Record<string, unknown> | undefined {
 export function ToolCallView({
 	name,
 	args,
+	result,
 }: {
 	name: string;
 	args: string;
+	result?: string;
 }) {
-	const parsed = tryParse(args);
+	const [expanded, setExpanded] = useState(name === "write" || name === "edit");
+	const parsed = useMemo(() => tryParse(args), [args]);
+	const output = useMemo(() => result === undefined ? undefined : tryParse(result), [result]);
+	const summary = toolSummary(name, parsed, output);
 
-	if (name === "read" && parsed && typeof parsed.path === "string") {
-		return <ReadToolCallView path={parsed.path} />;
-	}
-
-	if (name === "write" && parsed && typeof parsed.path === "string" && typeof parsed.content === "string") {
-		return <WriteToolCallView path={parsed.path} content={parsed.content} />
-	}
-	return <GenericToolCallView name={name} args={args} />;
+	return (
+		<box flexDirection="column" width="100%" flexShrink={0}>
+			<box
+				width="100%"
+				flexDirection="row"
+				flexShrink={0}
+				onMouseDown={(event) => {
+					if (event.button !== 0) return;
+					event.preventDefault();
+					setExpanded((value) => !value);
+				}}
+			>
+				<text flexGrow={1} flexShrink={1} minWidth={0} fg={theme.colors.textDim}>
+					<span>{name}</span>
+					<span>{summary ? ` ${summary}` : ""}</span>
+					<span>{result === undefined ? " (running)" : result.startsWith("Error:") ? " (failed)" : ""}</span>
+				</text>
+				<text width={20} flexShrink={0} fg={theme.colors.textDim}>
+					{expanded ? " [click to collapse]" : " [click to expand]"}
+				</text>
+			</box>
+			{expanded ? (
+				<ToolContentView name={name} input={parsed} output={output} args={args} result={result} />
+			) : name !== "write" && name !== "edit" ? (
+				<ToolPreviewView name={name} input={parsed} output={output} args={args} result={result} />
+			) : null}
+		</box>
+	);
 }

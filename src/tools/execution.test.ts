@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { applyPatch } from "diff";
 import { bashTool } from "./bash.ts";
 import { editTool } from "./edit.ts";
 import { grepTool } from "./grep.ts";
@@ -23,6 +24,22 @@ test("deadline aborts an operation and waits for its cleanup", async () => {
 	await expect(execution).rejects.toMatchObject({ name: "TimeoutError" });
 	expect(cleanedUp).toBe(true);
 	await waitForToolExecutions();
+});
+
+test("edit returns a full-file diff covering every applied replacement", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "jig-edit-"));
+	const path = join(directory, "example.ts");
+	const original = "// context\nconst first = 42;\nconst second = 42;\n";
+	await writeFile(path, original);
+	try {
+		const result = await editTool.execute!({ path, oldString: "42", newString: "43", replaceAll: true }, options());
+		const output = JSON.parse(result as string);
+		expect(output.replacements).toBe(2);
+		expect(applyPatch(original, output.diff)).toBe(await readFile(path, "utf-8"));
+		expect(output.diff).toContain(" // context");
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
 });
 
 test("all file tools reject pre-cancelled calls without modifying files", async () => {

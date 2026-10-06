@@ -1,6 +1,7 @@
 import {
 	createCliRenderer,
 	type CliRenderer,
+	type TextareaRenderable,
 } from "@opentui/core";
 import { createRoot, useKeyboard } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
@@ -10,13 +11,14 @@ import {
 	AssistantMessage,
 	ErrorView,
 	Logo,
+	ReasoningView,
 	Spinner,
 	StatusView,
 	ToolCallView,
-	ToolResultView,
 	UserInputView,
 } from "@/tui/components";
 import { ProviderDialog } from "@/tui/components/ProviderDialog.tsx";
+import { PromptInput } from "@/tui/components/PromptInput.tsx";
 import { theme } from "@/tui/theme.ts";
 
 export interface AppOptions {
@@ -32,13 +34,13 @@ const { borders } = theme;
 type Entry =
 	| { kind: "user"; key: number; text: string }
 	| { kind: "assistant"; key: number; text: string; streaming: boolean }
-	| { kind: "tool_call"; key: number; name: string; args: string }
-	| { kind: "tool_result"; key: number; name: string; result: string }
+	| { kind: "reasoning"; key: number; text: string; streaming: boolean }
+	| { kind: "tool_call"; key: number; id: string; name: string; args: string; result?: string }
 	| { kind: "status"; key: number; text: string }
 	| { kind: "error"; key: number; text: string };
 
 type Command = {
-	id: "clear" | "exit" | "esc" | "models" | "providers";
+	id: "clear" | "exit" | "esc" | "models" | "providers" | "init";
 	name: string;
 	description: string;
 	aliases?: readonly string[];
@@ -55,6 +57,7 @@ const commands: readonly Command[] = [
 		description: "Configure an AI provider",
 		aliases: ["/provider", "provider"],
 	},
+	{ id: "init", name: "/init", description: "Initialize the workspace" },
 ];
 
 let entryKey = 0;
@@ -71,28 +74,20 @@ const sampleEntries: Entry[] = [
 	{
 		kind: "tool_call",
 		key: 3,
+		id: "sample-read",
 		name: "read",
 		args: JSON.stringify({ path: "src/index.ts" }),
-	},
-	{
-		kind: "tool_result",
-		key: 4,
-		name: "read",
 		result: 'import { foo } from "./bar";\n\nexport function main() {\n  foo();\n}',
 	},
 	{
 		kind: "tool_call",
 		key: 5,
+		id: "sample-write",
 		name: "write",
 		args: JSON.stringify({
 			path: "src/new.ts",
 			content: 'import { baz } from "./qux";\n\nexport function run() {\n  baz();\n}',
 		}),
-	},
-	{
-		kind: "tool_result",
-		key: 6,
-		name: "write",
 		result: "Wrote 78 characters to src/new.ts",
 	},
 	{ kind: "status", key: 7, text: "Done." },
@@ -119,7 +114,8 @@ function CodingAgent({
 	const [dialog, setDialog] = useState<"provider" | "models" | null>(null);
 	const currentAssistantKey = useRef<number | null>(null);
 	const assistantBuffer = useRef("");
-	const inputRef = useRef<{ focus: () => void; value: string } | null>(null);
+	const reasoningKeys = useRef(new Map<string, number>());
+	const inputRef = useRef<TextareaRenderable | null>(null);
 	const commandSuggestions = inputValue.startsWith("/")
 		? commands.filter((command) =>
 				command.name.startsWith(inputValue.toLowerCase()),
@@ -146,11 +142,13 @@ function CodingAgent({
 		}
 		if (dialog || commandSuggestions.length === 0) return;
 		if (key.name === "up") {
+			key.preventDefault();
 			setCommandIndex(
 				(index) => (index - 1 + commandSuggestions.length) % commandSuggestions.length,
 			);
 		}
 		if (key.name === "down") {
+			key.preventDefault();
 			setCommandIndex((index) => (index + 1) % commandSuggestions.length);
 		}
 	});
@@ -166,16 +164,20 @@ function CodingAgent({
 
 		const onTurnStart = () => {
 			assistantBuffer.current = "";
-			const key = nextKey();
-			currentAssistantKey.current = key;
-			pushEntry({ kind: "assistant", key, text: "", streaming: true });
+			currentAssistantKey.current = null;
+			reasoningKeys.current.clear();
 		};
 
 		const onDelta = ({ content }: { content: string }) => {
 			assistantBuffer.current += content;
-			const key = currentAssistantKey.current;
-			if (key === null) return;
+			let key = currentAssistantKey.current;
 			const text = assistantBuffer.current;
+			if (key === null) {
+				key = nextKey();
+				currentAssistantKey.current = key;
+				pushEntry({ kind: "assistant", key, text, streaming: true });
+				return;
+			}
 			setEntries((prev) =>
 				prev.map((e) =>
 					e.kind === "assistant" && e.key === key ? { ...e, text } : e,
@@ -183,7 +185,35 @@ function CodingAgent({
 			);
 		};
 
+		const onReasoningStart = ({ id }: { id: string }) => {
+			if (reasoningKeys.current.has(id)) return;
+			const key = nextKey();
+			reasoningKeys.current.set(id, key);
+			pushEntry({ kind: "reasoning", key, text: "", streaming: true });
+		};
+
+		const onReasoningDelta = ({ id, content }: { id: string; content: string }) => {
+			onReasoningStart({ id });
+			const key = reasoningKeys.current.get(id);
+			setEntries((prev) => prev.map((entry) =>
+				entry.kind === "reasoning" && entry.key === key
+					? { ...entry, text: entry.text + content }
+					: entry,
+			));
+		};
+
+		const onReasoningEnd = ({ id }: { id: string }) => {
+			const key = reasoningKeys.current.get(id);
+			setEntries((prev) => prev.map((entry) =>
+				entry.kind === "reasoning" && entry.key === key
+					? { ...entry, streaming: false }
+					: entry,
+			));
+			reasoningKeys.current.delete(id);
+		};
+
 		const onToolCall = ({
+			id,
 			name,
 			arguments: args,
 		}: {
@@ -194,28 +224,41 @@ function CodingAgent({
 			pushEntry({
 				kind: "tool_call",
 				key: nextKey(),
+				id,
 				name,
 				args,
-		});
-	};
+			});
+		};
 
-	const onToolResult = ({
-		name,
-		result,
-	}: {
-		id: string;
-		name: string;
-		result: string;
-	}) => {
-		pushEntry({
-			kind: "tool_result",
-			key: nextKey(),
+		const onToolResult = ({
+			id,
 			name,
 			result,
-		});
-	};
+		}: {
+			id: string;
+			name: string;
+			result: string;
+		}) => {
+			const key = nextKey();
+			setEntries((prev) => {
+				const call = prev.find((entry) => entry.kind === "tool_call" && entry.id === id);
+				if (!call) {
+					return [...prev, { kind: "tool_call", key, id, name, args: "", result }];
+				}
+				return prev.map((entry) => entry === call ? { ...entry, result } : entry);
+			});
+		};
 
 		const finishCurrentAssistant = () => {
+			const keys = new Set(reasoningKeys.current.values());
+			if (keys.size > 0) {
+				setEntries((prev) => prev.map((entry) =>
+					entry.kind === "reasoning" && keys.has(entry.key)
+						? { ...entry, streaming: false }
+						: entry,
+				));
+				reasoningKeys.current.clear();
+			}
 			const key = currentAssistantKey.current;
 			if (key !== null) {
 				setEntries((prev) =>
@@ -252,6 +295,9 @@ function CodingAgent({
 		bus.on("agent:task_start", onTaskStart);
 		bus.on("agent:turn_start", onTurnStart);
 		bus.on("agent:delta", onDelta);
+		bus.on("agent:reasoning_start", onReasoningStart);
+		bus.on("agent:reasoning_delta", onReasoningDelta);
+		bus.on("agent:reasoning_end", onReasoningEnd);
 		bus.on("agent:tool_call", onToolCall);
 		bus.on("agent:tool_result", onToolResult);
 		bus.on("agent:turn_end", onTurnEnd);
@@ -263,6 +309,9 @@ function CodingAgent({
 			bus.off("agent:task_start", onTaskStart);
 			bus.off("agent:turn_start", onTurnStart);
 			bus.off("agent:delta", onDelta);
+			bus.off("agent:reasoning_start", onReasoningStart);
+			bus.off("agent:reasoning_delta", onReasoningDelta);
+			bus.off("agent:reasoning_end", onReasoningEnd);
 			bus.off("agent:tool_call", onToolCall);
 			bus.off("agent:tool_result", onToolResult);
 			bus.off("agent:turn_end", onTurnEnd);
@@ -284,13 +333,13 @@ function CodingAgent({
 			return;
 		}
 		if (command?.id === "esc") {
-			if (inputRef.current) inputRef.current.value = "";
+			inputRef.current?.clear();
 			setInputValue("");
 			bus.emit("user:cancel");
 			return;
 		}
 		if (running) return;
-		if (inputRef.current) inputRef.current.value = "";
+		inputRef.current?.clear();
 		setInputValue("");
 		if (command?.id === "providers") {
 			setDialog("provider");
@@ -298,6 +347,10 @@ function CodingAgent({
 		}
 		if (command?.id === "models") {
 			setDialog("models");
+			return;
+		}
+		if (command?.id === "init") {
+			// Reserved: initialize the workspace. No action for now.
 			return;
 		}
 
@@ -327,7 +380,7 @@ function CodingAgent({
 				stickyScroll={true}
 				stickyStart="bottom"
 				padding={1}
-				gap={10}
+				contentOptions={{ gap: 1 }}
 			>
 				<Logo/>
 				{entries.map((entry) => {
@@ -344,19 +397,20 @@ function CodingAgent({
 									streaming={entry.streaming}
 								/>
 							);
+						case "reasoning":
+							return (
+								<ReasoningView
+									key={entry.key}
+									text={entry.text}
+									streaming={entry.streaming}
+								/>
+							);
 						case "tool_call":
 							return (
 								<ToolCallView
 									key={entry.key}
 									name={entry.name}
 									args={entry.args}
-								/>
-							);
-						case "tool_result":
-							return (
-								<ToolResultView
-									key={entry.key}
-									name={entry.name}
 									result={entry.result}
 								/>
 							);
@@ -367,37 +421,21 @@ function CodingAgent({
 					}
 				})}
 			</scrollbox>
-			{commandSuggestions.length > 0 && (
-				<CommandDropdown
-					commands={commandSuggestions}
-					selectedIndex={commandIndex}
-				/>
-			)}
-			<box
-				flexDirection="row"
-				height={3}
-				width="100%"
-				style={{
-					border: ["top", "bottom"],
-					borderColor: borders.input.color,
+			<PromptInput
+				inputRef={inputRef}
+				focused={!dialog}
+				onChange={(value) => {
+					setInputValue(value);
+					setCommandIndex(0);
+				}}
+				onSubmit={(value) => {
+					handleSubmit(value === inputValue ? selectedCommand?.name ?? value : value);
 				}}
 			>
-				<input
-					ref={inputRef as never}
-					flexGrow={1}
-					focused={!dialog}
-					placeholder='ask the agent  (Esc: stop, Ctrl+C: exit, /clear: reset)'
-					value={inputValue}
-					onInput={(value) => {
-						setInputValue(value);
-						setCommandIndex(0);
-					}}
-					onSubmit={() => {
-						const value = inputRef.current?.value ?? inputValue;
-						handleSubmit(value === inputValue ? selectedCommand?.name ?? value : value);
-					}}
-				/>
-			</box>
+				{commandSuggestions.length > 0 && (
+					<CommandDropdown commands={commandSuggestions} selectedIndex={commandIndex} />
+				)}
+			</PromptInput>
 			<box
 				flexDirection="row"
 				height={1}
@@ -429,7 +467,8 @@ function CommandDropdown({
 		<box
 			position="absolute"
 			left={2}
-			bottom={4}
+			bottom="100%"
+			marginBottom={1}
 			zIndex={5}
 			flexDirection="column"
 			width={48}

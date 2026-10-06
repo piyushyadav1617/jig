@@ -1,6 +1,7 @@
 export { Logo } from "./Logo.tsx";
 export { UserInputView } from "./UserInputView.tsx";
 export { AssistantMessage } from "./AssistantMessage.tsx";
+export { ReasoningView } from "./ReasoningView.tsx";
 export { ToolCallView } from "./ToolCallView.tsx";
 export { ToolResultView } from "./ToolResultView.tsx";
 export { StatusView } from "./StatusView.tsx";
