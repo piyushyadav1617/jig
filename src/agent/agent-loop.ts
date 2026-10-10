@@ -61,7 +61,7 @@ export class AgentLoop {
 		this.modelManager =
 			options.modelManager ?? new ModelManager({ model: options.model });
 		this.model = options.model ?? this.modelManager.defaultModel;
-		this.maxTurns = options.maxTurns ?? 100;
+		this.maxTurns = options.maxTurns ?? 500;
 		this.cwd = options.cwd ?? process.cwd();
 		this.resetHistory();
 		this.bindUserEvents();

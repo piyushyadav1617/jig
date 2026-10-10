@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useKeyboard } from "@opentui/react";
+import type { ScrollBoxRenderable } from "@opentui/core";
 import type { ProviderDefinition } from "@/providers/types.ts";
 import type { ModelManager } from "@/api/model-manager.ts";
 import { theme } from "@/tui/theme.ts";
@@ -284,13 +285,22 @@ function ModelList({
 	onSelect: (option: ModelSelectOption | null) => void;
 }) {
 	const [focusSearch, setFocusSearch] = useState(false);
-	const modelListRef = useRef<{
-		scrollChildIntoView: (id: string) => void;
-	} | null>(null);
+	const modelListRef = useRef<ScrollBoxRenderable | null>(null);
+	// Each preceding group contributes a heading, its model rows, and a bottom margin.
+	const selectedRow = groups.slice(0, activeGroupIndex).reduce(
+		(rows, group) => rows + group.options.length + 2,
+		0,
+	) + 1 + (selectedIndexes[activeGroupIndex] ?? 0);
 
 	useEffect(() => {
-		modelListRef.current?.scrollChildIntoView(`model-group-${activeGroupIndex}`);
-	}, [activeGroupIndex]);
+		const list = modelListRef.current;
+		if (!list) return;
+		if (selectedRow < list.scrollTop) {
+			list.scrollTo(selectedRow);
+		} else if (selectedRow >= list.scrollTop + list.viewport.height) {
+			list.scrollTo(selectedRow - list.viewport.height + 1);
+		}
+	}, [selectedRow, query]);
 
 	useKeyboard((key) => {
 		if (key.name === "tab") setFocusSearch((focused) => !focused);
@@ -334,12 +344,13 @@ function ModelList({
 				onInput={onQueryChange}
 				focused={focusSearch}
 			/>
-			<scrollbox ref={modelListRef as never} height={9} marginTop={1}>
+			<scrollbox ref={modelListRef} height={9} flexShrink={0} marginTop={1} scrollX={false}>
 				{groups.map((group, groupIndex) => (
 					<box
 						key={group.provider.id}
 						id={`model-group-${groupIndex}`}
 						flexDirection="column"
+						flexShrink={0}
 						marginBottom={1}
 					>
 						<text height={1} fg={colors.textMuted}>
@@ -348,6 +359,7 @@ function ModelList({
 						<select
 							width="100%"
 							height={group.options.length}
+							flexShrink={0}
 							options={group.options}
 							selectedIndex={selectedIndexes[groupIndex] ?? 0}
 							focused={false}
