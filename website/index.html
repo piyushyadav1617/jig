@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description"
+    content="jig is an AI coding agent for your terminal. Install it with one command and get to work.">
+  <meta name="theme-color" content="#131111">
+  <meta property="og:title" content="jig — AI coding agent for the terminal">
+  <meta property="og:description"
+    content="An AI coding agent for your terminal. See it in action and install with one command.">
+  <meta property="og:type" content="website">
+  <title>jig — AI coding agent for the terminal</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+  <link rel="manifest" href="/manifest.webmanifest" crossOrigin="use-credentials">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#fff">
+  <meta name="application-name" content="Image to Favicon From Poper">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180x180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Image to Favicon From Poper">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/asciinema-player@3.17.0/dist/bundle/asciinema-player.css">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/asciinema-player@3.17.0/dist/bundle/asciinema-player.min.js" defer></script>
+  <script src="script.js" defer></script>
+</head>
+
+<body>
+  <main class="shell">
+    <div class="intro" id="top">
+      <header class="compact-header">
+        <div class="compact-brand">
+          <img src="logo.png" alt="jig" width="80" height="44">
+          <h1>AI coding agent for your terminal</h1>
+        </div>
+        <a href="https://github.com/piyushyadav1617/jig" target="_blank" rel="noreferrer">GitHub <span
+            class="link-arrow" aria-hidden="true">↗</span></a>
+      </header>
+      <section class="install" id="install" aria-label="Install jig">
+        <div class="command-block">
+          <pre><code id="install-command">curl -fsSL <span class="command-url">https://raw.githubusercontent.com/piyushyadav1617/jig/main/install.sh</span> | sh</code></pre>
+          <button class="copy-button" type="button" data-copy-target="install-command"
+            aria-label="Copy install command"><span class="copy-icon" aria-hidden="true">⧉</span><span
+              class="copy-label" aria-live="polite">Copy</span></button>
+        </div>
+      </section>
+      <p class="install-note">Then run <code>jig</code> in your project.</p>
+    </div>
+
+    <section class="demo" aria-label="jig in action">
+      <div id="demo-player"></div>
+      <noscript>
+        <p><a href="https://asciinema.org/a/rUMjTcI719Be9326">Watch jig in action on asciinema ↗</a></p>
+      </noscript>
+    </section>
+
+    <section class="usage" id="usage" aria-labelledby="usage-title">
+      <div class="section-heading">
+        <p class="eyebrow">A quick start</p>
+        <h2 id="usage-title">From your terminal to your next commit.</h2>
+        <p>Install it above, then you're ready to go.</p>
+      </div>
+      <ol class="usage-steps">
+        <li>
+          <span class="step-number" aria-hidden="true">01</span>
+          <div>
+            <h3>Open your project</h3>
+            <p>Go to the folder you want to work on and start jig.</p>
+            <pre><code>cd your-project
+jig</code></pre>
+          </div>
+        </li>
+        <li>
+          <span class="step-number" aria-hidden="true">02</span>
+          <div>
+            <h3>Tell jig what you need</h3>
+            <p>Type a task in plain language and press Enter. Jig can read files, make changes, and run commands.</p>
+            <div class="example-prompt">“Explain how this project works.”<br>“Fix the failing tests.”<br>“Add a health
+              check endpoint.”</div>
+          </div>
+        </li>
+        <li>
+          <span class="step-number" aria-hidden="true">03</span>
+          <div>
+            <h3>Review and keep going</h3>
+            <p>Watch the work in your terminal, review the changes, and ask a follow-up. Press <kbd>Esc</kbd> to stop a
+              task.</p>
+          </div>
+        </li>
+      </ol>
+      <div class="commands">
+        <h3>A few useful commands</h3>
+        <p>Type these inside jig.</p>
+        <dl>
+          <div>
+            <dt><code>/models</code></dt>
+            <dd>Choose the model you want to use.</dd>
+          </div>
+          <div>
+            <dt><code>/providers</code></dt>
+            <dd>Connect your own provider with an API key.</dd>
+          </div>
+          <div>
+            <dt><code>/clear</code></dt>
+            <dd>Start a fresh conversation.</dd>
+          </div>
+          <div>
+            <dt><code>/exit</code></dt>
+            <dd>Close jig when you're done.</dd>
+          </div>
+        </dl>
+      </div>
+      <a class="docs-link" href="https://github.com/piyushyadav1617/jig#readme" target="_blank" rel="noreferrer">Read
+        more on GitHub <span class="link-arrow" aria-hidden="true">↗</span></a>
+    </section>
+
+    <footer>
+      <a href="#top">jig · built for the terminal <span class="link-arrow" aria-hidden="true">↑</span></a>
+      <a href="https://github.com/piyushyadav1617/jig" target="_blank" rel="noreferrer">piyushyadav1617/jig ↗</a>
+    </footer>
+  </main>
+</body>
+
+</html>
