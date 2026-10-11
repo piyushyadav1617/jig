@@ -1,78 +1,59 @@
 <p align="center">
-  <img src="./logo.png" alt="jig logo" width="240" />
+  <img src="./logo.png" alt="jig logo" width="200" />
 </p>
 
 # jig
 
-`jig` is a terminal coding agent that uses an LLM to inspect and modify a
-repository. It can read, search, edit, and write files, and run shell commands
-through a streaming conversation.
+An AI coding agent for your terminal. Give it a task and watch it read files,
+make changes, and run commands in your project.
 
-> Experimental software. Run jig only in a working directory where you are
-> comfortable allowing an AI agent to operate.
-
-## Requirements
-
-- `curl` on macOS or Linux
-- An API key for [OpenAI](https://platform.openai.com/),
-  [Anthropic](https://console.anthropic.com/), or
-  [OpenRouter](https://openrouter.ai/)
+[Website / demo ↗](https://piyushyadav1617.github.io/jig/)
 
 ## Install
+
+On macOS or Linux:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/piyushyadav1617/jig/main/install.sh | sh
 ```
 
-## Run
+## Use
+
+Open your project and start jig:
 
 ```sh
+cd your-project
 jig
 ```
 
-For development from the source repository, install
-[Bun](https://bun.sh/) and run:
+Type what you need and press Enter. For example:
 
-```sh
-bun install
-bun run start
+- “Explain how this project works.”
+- “Fix the failing tests.”
+- “Add a health check endpoint.”
 
-# Watch for source changes
-bun run dev
-```
-
-On first use, enter `/providers` to connect a provider with an API key. Keys
-are stored in `~/.config/jig/auth.json`. Set `JIG_AUTH_FILE` to use a different
-file, or set `XDG_CONFIG_HOME` to change the config directory.
-
-The default model is `openrouter/inclusionai/ling-3.0-flash-fin:free`. Override
-it with `MODEL`:
-
-```bash
-MODEL=openai/gpt-5 jig
-```
+Use the included model, or type `/providers` to connect your own provider with
+an API key. Review the changes and ask a follow-up.
 
 ## Commands
 
-| Command | Action |
+| Command | What it does |
 | --- | --- |
-| `/providers` | Connect or switch providers |
 | `/models` | Choose a model |
-| `/clear` | Clear conversation history |
-| `/exit` | Exit jig |
+| `/providers` | Connect a provider |
+| `/clear` | Start a fresh conversation |
+| `/esc` | Stop the current task |
+| `/exit` | Close jig |
 
-`exit` and `quit` are also supported as aliases for `/exit`.
-
-## Tools
-
-- `read` Read a file
-- `write` Create or replace a file
-- `edit` Replace an exact string in a file
-- `grep` Search files with a regular expression
-- `bash` Run a shell command
+You can also press **Esc** to stop a task. Changes already made are kept.
 
 ## Development
 
-```bash
-bun run typecheck
+Requires [Bun](https://bun.sh/).
+
+```sh
+bun install
+bun run dev
 ```
+
+Run checks with `bun run typecheck` and `bun test`.
