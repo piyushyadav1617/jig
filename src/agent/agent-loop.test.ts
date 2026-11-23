@@ -132,3 +132,30 @@ test("exit aborts an active stream and shutdown waits for task completion", asyn
 	expect(signal?.aborted).toBe(true);
 	expect(agent.isRunning).toBe(false);
 });
+
+test("reports current input usage and the model context window", async () => {
+	const bus = new Bus();
+	const contexts: Array<{ usedTokens?: number; totalTokens?: number }> = [];
+	bus.on("agent:context", (context) => contexts.push(context));
+	const manager = {
+		defaultModel: "test",
+		getContextWindowTokens: () => 128_000,
+		async streamText() {
+			return {
+				stream: (async function* () {
+					yield { type: "text-delta", text: "Done." };
+				})(),
+				responseMessages: Promise.resolve([]),
+				toolCalls: Promise.resolve([]),
+				usage: Promise.resolve({ inputTokens: 1_234 }),
+			};
+		},
+	} as unknown as ModelManager;
+	const agent = new AgentLoop({ bus, modelManager: manager });
+	const ended = new Promise<void>((resolve) => bus.once("agent:task_end", resolve));
+	bus.emit("user:input", "check context");
+	await ended;
+
+	expect(contexts).toEqual([{ usedTokens: 1_234, totalTokens: 128_000 }]);
+	await agent.stop();
+});

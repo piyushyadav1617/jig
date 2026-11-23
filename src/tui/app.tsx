@@ -39,6 +39,11 @@ type Entry =
 	| { kind: "status"; key: number; text: string }
 	| { kind: "error"; key: number; text: string };
 
+type ContextUsage = {
+	usedTokens?: number;
+	totalTokens?: number;
+};
+
 type Command = {
 	id: "clear" | "exit" | "esc" | "models" | "providers" | "init";
 	name: string;
@@ -62,6 +67,20 @@ const commands: readonly Command[] = [
 
 let entryKey = 0;
 const nextKey = () => ++entryKey;
+
+export function formatTokenCount(tokens?: number): string {
+	if (tokens === undefined) return "--";
+	if (tokens < 1_000) return String(tokens);
+
+	const units = [
+		{ divisor: 1_000_000, suffix: "M" },
+		{ divisor: 1_000, suffix: "K" },
+	];
+	const unit = units.find(({ divisor }) => tokens >= divisor) ?? units.at(-1)!;
+	const value = tokens / unit.divisor;
+	const precision = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+	return `${Number(value.toFixed(precision))}${unit.suffix}`;
+}
 
 const sampleEntries: Entry[] = [
 	{ kind: "user", key: 1, text: "Can you read src/index.ts and write a new file?" },
@@ -111,6 +130,9 @@ function CodingAgent({
 	const [inputValue, setInputValue] = useState("");
 	const [commandIndex, setCommandIndex] = useState(0);
 	const [activeModel, setActiveModel] = useState(model);
+	const [contextUsage, setContextUsage] = useState<ContextUsage>(() => ({
+		totalTokens: modelManager.getContextWindowTokens(model),
+	}));
 	const [dialog, setDialog] = useState<"provider" | "models" | null>(null);
 	const currentAssistantKey = useRef<number | null>(null);
 	const assistantBuffer = useRef("");
@@ -277,6 +299,10 @@ function CodingAgent({
 			finishCurrentAssistant();
 		};
 
+		const onContext = ({ usedTokens, totalTokens }: ContextUsage) => {
+			setContextUsage({ usedTokens, totalTokens });
+		};
+
 		const onTaskEnd = () => {
 			finishCurrentAssistant();
 			setRunning(false);
@@ -301,6 +327,7 @@ function CodingAgent({
 		bus.on("agent:tool_call", onToolCall);
 		bus.on("agent:tool_result", onToolResult);
 		bus.on("agent:turn_end", onTurnEnd);
+		bus.on("agent:context", onContext);
 		bus.on("agent:task_end", onTaskEnd);
 		bus.on("agent:error", onError);
 		bus.on("agent:status", onStatus);
@@ -315,6 +342,7 @@ function CodingAgent({
 			bus.off("agent:tool_call", onToolCall);
 			bus.off("agent:tool_result", onToolResult);
 			bus.off("agent:turn_end", onTurnEnd);
+			bus.off("agent:context", onContext);
 			bus.off("agent:task_end", onTaskEnd);
 			bus.off("agent:error", onError);
 			bus.off("agent:status", onStatus);
@@ -370,6 +398,9 @@ function CodingAgent({
 	const handleModelChange = (nextModel: string): boolean => {
 		if (!onModelChange(nextModel)) return false;
 		setActiveModel(nextModel);
+		setContextUsage({
+			totalTokens: modelManager.getContextWindowTokens(nextModel),
+		});
 		return true;
 	};
 
@@ -442,7 +473,10 @@ function CodingAgent({
 				width="100%"
 			>
 				<box flexGrow={1}>{running && <Spinner />}</box>
-				<text>{activeModel}</text>
+				<text fg={theme.colors.textMuted}>
+					context {formatTokenCount(contextUsage.usedTokens)} / {formatTokenCount(contextUsage.totalTokens)}
+				</text>
+				<text marginLeft={1}>{activeModel}</text>
 			</box>
 			{dialog && (
 				<ProviderDialog

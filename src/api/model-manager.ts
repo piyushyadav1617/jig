@@ -49,6 +49,10 @@ export class ModelManager {
 		return this.providers.list();
 	}
 
+	getContextWindowTokens(model = this.defaultModel): number | undefined {
+		return this.providers.getContextWindowTokens(model);
+	}
+
 	async isAuthenticated(providerId: string): Promise<boolean> {
 		if (this.providers.get(providerId).requiresAuthentication === false) return true;
 		return (await this.credentials.get(providerId)) !== undefined;

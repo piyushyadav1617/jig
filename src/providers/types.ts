@@ -6,6 +6,7 @@ export type ModelDefinition = {
 	id: string;
 	displayName: string;
 	description?: string;
+	contextWindowTokens?: number;
 };
 
 export type ProviderDefinition = {

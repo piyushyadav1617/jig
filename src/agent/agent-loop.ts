@@ -156,6 +156,11 @@ export class AgentLoop {
 		this.messages.push(...cloneMessages(task.transcript));
 	}
 
+	private getContextWindowTokens(): number | undefined {
+		if (typeof this.modelManager.getContextWindowTokens !== "function") return undefined;
+		return this.modelManager.getContextWindowTokens(this.model);
+	}
+
 	private async runTask(task: TaskContext): Promise<void> {
 		let turn = 0;
 
@@ -215,6 +220,11 @@ export class AgentLoop {
 
 			const responseMessages = await result.responseMessages;
 			task.transcript.push(...responseMessages);
+			const usage = await result.usage;
+			this.bus.emit("agent:context", {
+				usedTokens: usage?.inputTokens,
+				totalTokens: this.getContextWindowTokens(),
+			});
 
 			this.commitTask(task);
 			const toolCalls = await result.toolCalls;

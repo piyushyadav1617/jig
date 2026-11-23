@@ -15,6 +15,7 @@ export type AgentEventMap = {
 	"agent:tool_call": [{ id: string; name: string; arguments: string }];
 	"agent:tool_result": [{ id: string; name: string; result: string }];
 	"agent:turn_end": [{ turn: number }];
+	"agent:context": [{ usedTokens?: number; totalTokens?: number }];
 	"agent:task_end": [];
 	"agent:error": [{ error: string }];
 	"agent:status": [{ status: string }];
